@@ -1,4 +1,4 @@
-from Tkinter import *
+from tkinter import *
 from PIL import Image, ImageTk
 
 MAP_WIDTH = 600
@@ -15,9 +15,9 @@ class ASV_graphics:
 		self.sidebar = Frame(self.tk, width=300, bg='white', height=500, relief='sunken', borderwidth=2)
 		self.sidebar.pack(expand=True, fill='both', side='left', anchor='nw')
 
-		self.gps = Label(self.sidebar, anchor='w', text='Latitude: ???\nLongitude: ???\nHeading: ???\n')
-		self.gps.grid(column=0, row=0)
-		self.gps.pack()
+		# self.gps = Label(self.sidebar, anchor='w', text='Latitude: ???\nLongitude: ???\nHeading: ???\n')
+		# self.gps.grid(row=0, column=0)
+		# self.gps.pack()
 
 		# main content area
 		self.map_frame = Frame(self.tk)
@@ -29,13 +29,20 @@ class ASV_graphics:
 
 		#function to be called when mouse is clicked
 		def printcoords(event):
-			print (event.x,event.y)
+			print(event.x,event.y)
 
 		self.canvas = Canvas(self.map_frame, width=MAP_WIDTH, height=MAP_HEIGHT)
 		self.canvas.create_image(0,0, image=self.img, anchor=NW)
-		self.canvas.grid(row=0,column=0)
+		walls = self.canvas.create_rectangle(150, 100, 400, 300,outline='red')
+		self.canvas.grid(row=0,column=0, columnspan = 2)
 		self.canvas.pack()
 		self.canvas.bind("<Button 1>",printcoords)
+
+		self.control = Label(self.map_frame, anchor='w', text='Latitude: ???\nLongitude: ???\nHeading: ???')
+		self.control.pack(side='left')
+
+		self.deploy = Button(self.map_frame, anchor='w', text='Deploy')
+		self.deploy.pack(side='right')
 
 		#######################################################################
 
