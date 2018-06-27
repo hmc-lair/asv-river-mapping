@@ -55,12 +55,13 @@ def read_response(verbose=False):
 # Control Commands
 ###############################################################################
 def start_ping():
-	print("Requesting Pings")
-	ser.write(b'CS\r\n')
+    print("Requesting Pings")
+    ser.write(b'CS\r\n')
+    ser.read(10) #response includes command    
 
 def stop_ping():
-	print('Stopping Pings')
-	ser.write(b'CSTOP\r\n')
+    print('Stopping Pings')
+    ser.write(b'CSTOP\r\n')
     
 def read_ensemble(verbose=False):
     header = ser.read(2)
@@ -84,12 +85,13 @@ def read_ensemble(verbose=False):
     if checksum_int != datasum_int:
         print('ERROR: ', checksum_int, datasum_int)
 
+    return data
+
 ###############################################################################
 
 def main():
     setup()
     start_ping()
-    ser.read(10) #response includes command
     
     for i in range(2):
         read_ensemble(verbose=True)
