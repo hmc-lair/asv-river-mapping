@@ -1,8 +1,8 @@
 import serial
 import time
 
-# COM_PORT = "/dev/ttyUSB0" #Pi
-COM_PORT = "/dev/tty.usbserial-FT8VW9AR" # for John's macbook
+COM_PORT = "/dev/ttyUSB0" #Pi
+# COM_PORT = "/dev/tty.usbserial-FT8VW9AR" # for John's macbook
 BAUD_RATE = "115200"
 ser = serial.Serial(COM_PORT, BAUD_RATE, stopbits=serial.STOPBITS_ONE)
 
@@ -12,8 +12,9 @@ Setup connection
 def setup():
     print("Starting ADCP communication")
     ser.write(b'+++')
+    time.sleep(5)
     s = read_response(ser)
-    #print('Startup message: ', s)
+    print('Startup message: ', s)
     return ser
 
 '''
@@ -39,7 +40,7 @@ def read_response(port, verbose=False):
         response += s
         cur_line += s
         if verbose and s == b'\n':
-            print(cur_line[:-2])
+            print(cur_line)
             cur_line = b''
 
         if b'>' in response: #stop character
@@ -60,14 +61,32 @@ def stop_ping():
 def main():
     setup()
     start_ping()
-    while True:
-    	try:
-    		if ser.in_waiting > 0:
-    			data = ser.readline()
-    			print(data)
-    	except KeyboardInterrupt:
-    		break
+    start = ser.read(12)
+    print('Input: ', start)
+    
+    num_bytes = ser.read(2)
+    bytes_to_checksum = int.from_bytes(num_bytes, byteorder='little')-4 #no checksum
+    print('Num: ', bytes_to_checksum)
+    
+    data = ser.read(bytes_to_checksum)
+    print('Data: ', data)
+
+    checksum = ser.read(2)
+    print('Checksum: ', checksum)
+    print(int.from_bytes(checksum, byteorder='little')) 
+    print('Header?', ser.read(2))
+
+#   while True:
+#     	try:
+#     		if ser.in_waiting > 0:
+#     			data = ser.readline()
+#     			print(data)
+#     	except KeyboardInterrupt:
+#     		break
     stop_ping()
+
+    print('Sum:', sum(b'\x7f\x7f' + num_bytes + data) % 2**16)
+    ser.write(b'===')
     ser.close()
 
 if __name__=='__main__':
