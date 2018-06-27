@@ -11,7 +11,6 @@ Setup connection
 '''
 def setup():
     print("Starting ADCP communication")
-    ser = serial.Serial(COM_PORT, BAUD_RATE, stopbits=serial.STOPBITS_ONE)
     ser.write(b'+++')
     s = read_response(ser)
     #print('Startup message: ', s)
@@ -24,7 +23,7 @@ Inputs:
     ser - Serial port
     command - in bytes
 '''
-def send(ser, command):
+def send(command):
     ser.write(command + b'\r')
     s = read_response(ser, verbose=True)
     return s
