@@ -3,7 +3,7 @@ import serial
 import time
 
 COM_PORT = "/dev/ttyUSB0" #Pi ADCP
-xbee_port = '/dev/tty/USB' #Pi xbee
+xbee_port = '/dev/ttyUSB1' #Pi xbee
 # COM_PORT = "/dev/tty.usbserial-FT8VW9AR" # for John's macbook
 BAUD_RATE = "115200"
 ser = serial.Serial(COM_PORT, BAUD_RATE, stopbits=serial.STOPBITS_ONE)
@@ -21,11 +21,12 @@ Outputs:
     central_xbee - XBeeDevice (None if no discovery)
 '''
 def discover_xbee(xbee):
-    boat_xbee.open()
+    xbee.open()
     xbee_network = xbee.get_network()
     xbee_network.start_discovery_process()
     while xbee_network.is_discovery_running():
         time.sleep(0.5)
+    print(xbee_network.get_devices())
     central_xbee = xbee_network.discover_device('central')
     return central_xbee
 
@@ -37,6 +38,7 @@ def discover_xbee(xbee):
 Setup ADCP connection
 '''
 def setup():
+    ser.flush()
     print("Starting ADCP communication")
     ser.write(b'+++')
     time.sleep(3)
@@ -108,6 +110,12 @@ def read_ensemble(verbose=False):
     if checksum_int != datasum_int:
         print('ERROR: ', checksum_int, datasum_int)
 
+    #read data to file
+    hex_data = binascii.hexlify(b'\x7f\x7f' + num_bytes + data + checksum)
+    f = open('results.bin', 'wb')
+    f.write(data)
+    f.close()
+
     return data
 
 ###############################################################################
@@ -122,13 +130,17 @@ def main():
         boat_xbee.close()
         return
     else:
-        msg = central_xbee.read_data()
+        print('Device found! Waiting for starting cue...')
+        msg = boat_xbee.read_data(100)
         print(msg.data)
-
+    
+    boat_xbee.set_sync_ops_timeout(10)
+    
     start_ping()
     for i in range(2):
-        ensemble = read_ensemble(verbose=True)
-        boat_xbee.send_data_async(central_xbee, ensemble)
+        ensemble = read_ensemble(verbose=False)
+        print(ensemble)
+        boat_xbee.send_data(central_xbee, ensemble[0:100])
     
     stop_ping()
     ser.write(b'===')
