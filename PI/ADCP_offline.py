@@ -1,37 +1,14 @@
-from digi.xbee.devices import XBeeDevice
 import serial
 import time
+import binascii
 
-COM_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VW9AR-if00-port0' #Pi ADCP
-xbee_port = '/dev/serial/by-id/usb-FTDI_FT231X_USB_UART_DN02Z3LX-if00-port0' #Pi xbee
+COM_PORT = "/dev/ttyUSB0" #Pi ADCP
+xbee_port = '/dev/ttyUSB1' #Pi xbee
 # COM_PORT = "/dev/tty.usbserial-FT8VW9AR" # for John's macbook
 BAUD_RATE = "115200"
 ser = serial.Serial(COM_PORT, BAUD_RATE, stopbits=serial.STOPBITS_ONE)
-boat_xbee = XBeeDevice(xbee_port, 9600)
 
 f = open('results.bin', 'wb')
-
-###############################################################################
-# Set up Xbee
-###############################################################################
-'''
-Discover the central xbee
-
-Inputs:
-    xbee - XBeeDevice
-Outputs:
-    central_xbee - XBeeDevice (None if no discovery)
-'''
-def discover_xbee(xbee):
-    xbee.open()
-    xbee_network = xbee.get_network()
-    xbee_network.start_discovery_process()
-    while xbee_network.is_discovery_running():
-        time.sleep(0.5)
-    print(xbee_network.get_devices())
-    central_xbee = xbee_network.discover_device('central')
-    return central_xbee
-
 
 ###############################################################################
 # Setup/Helper Functions
@@ -92,6 +69,7 @@ def stop_ping():
     
 def read_ensemble(verbose=False):
     header = ser.read(2)
+    print(header[0])
     if header != b'\x7f\x7f':
         print('ERROR no header: ', header)
   
@@ -122,35 +100,13 @@ def read_ensemble(verbose=False):
 
 def main():
     setup()
-    central_xbee = discover_xbee(boat_xbee)
-    
-    if central_xbee == None:
-        print("No device")
-        ser.close()
-        boat_xbee.close()
-        return
-    else:
-        print('device found! waiting..')
-        boat_xbee.send_data(central_xbee, b'Device found! Waiting for starting cue...')
-        msg = boat_xbee.read_data(100)
-        print(msg.data)
-    
-    boat_xbee.set_sync_ops_timeout(10)
-    
     start_ping()
-    while True:
-        ensemble = read_ensemble(verbose=False)
-        print(ensemble)
-        msg = boat_xbee.read_data()
-        if msg != None:
-            boat_xbee.send_data(central_xbee, b'Stopping!')
-            print('stopping!')
-            break
+    for i in range(2):
+        ensemble = read_ensemble(verbose=True)
 
     stop_ping()
     ser.write(b'===')
     ser.close()
-    boat_xbee.close()
     f.close()
 
 if __name__=='__main__':

@@ -2,7 +2,7 @@ import binascii
 
 def main():
     #read file
-    with open('results.bin','rb') as f:
+    with open('data/test_results.bin','rb') as f:
         result = b''
         for line in f.readlines():
             data = line
