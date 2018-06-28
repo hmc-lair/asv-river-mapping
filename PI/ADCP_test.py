@@ -1,17 +1,40 @@
+from digi.xbee.devices import XBeeDevice
 import serial
 import time
 
-COM_PORT = "/dev/ttyUSB0" #Pi
+COM_PORT = "/dev/ttyUSB0" #Pi ADCP
+xbee_port = '/dev/tty/USB' #Pi xbee
 # COM_PORT = "/dev/tty.usbserial-FT8VW9AR" # for John's macbook
 BAUD_RATE = "115200"
 ser = serial.Serial(COM_PORT, BAUD_RATE, stopbits=serial.STOPBITS_ONE)
+boat_xbee = XBeeDevice(xbee_port, 9600)
+
+###############################################################################
+# Set up Xbee
+###############################################################################
+'''
+Discover the central xbee
+
+Inputs:
+	xbee - XBeeDevice
+Outputs:
+	central_xbee - XBeeDevice (None if no discovery)
+'''
+def discover_xbee(xbee):
+	boat_xbee.open()
+	xbee_network = xbee.get_network()
+	xbee_network.start_discovery_process()
+	while xbee_network.is_discovery_running():
+    	time.sleep(0.5)
+    central_xbee = xbee_network.discover_device('central')
+    return central_xbee
 
 
 ###############################################################################
 # Setup/Helper Functions
 ###############################################################################
 '''
-Setup connection
+Setup ADCP connection
 '''
 def setup():
     print("Starting ADCP communication")
@@ -92,13 +115,22 @@ def read_ensemble(verbose=False):
 def main():
     setup()
     start_ping()
+    central_xbee = discover_xbee(boat_xbee)
     
+    if central_xbee = None:
+    	print("No device")
+    else:
+    	msg = central_xbee.read_data()
+ 		print(msg.data)
+
     for i in range(2):
-        read_ensemble(verbose=True)
+        ensemble = read_ensemble(verbose=True)
+        boat_xbee.send_data_async(central_xbee, ensemble)
     
     stop_ping()
     ser.write(b'===')
     ser.close()
+    boat_xbee.close()
 
 if __name__=='__main__':
     main()
