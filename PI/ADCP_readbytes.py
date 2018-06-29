@@ -5,7 +5,7 @@ def main():
         for line in f.readlines():
             data = line
             all_data += data 
-    print(all_data)
+    # print(all_data)
 
     num_types = all_data[5]
     
@@ -21,8 +21,18 @@ def main():
         offset = all_data[6+2*i:8+2*i]
         offset_int = int.from_bytes(offset, byteorder='little')
         offsets.append(offset_int)
-    print('Offsets: ', offsets)
-    print('Data IDs: ', [all_data[x:x+2] for x in offsets])
+    # print('Offsets: ', offsets)
+    # print('Data IDs: ', [all_data[x:x+2] for x in offsets])
+
+    # FIXED LEADER
+    fixed_leader_offset = offsets[0]
+
+    num_beams = all_data[fixed_leader_offset+8]
+    num_cells = all_data[fixed_leader_offset+9]
+    pings_per_ensemble = int.from_bytes(all_data[fixed_leader_offset+10: fixed_leader_offset+12], byteorder='little')
+    depth_cell_length = int.from_bytes(all_data[fixed_leader_offset+12: fixed_leader_offset+14], byteorder='little')
+    print('Num beams: ', num_beams)
+    print('Num cells: ', num_cells)
 
     # VARIABLE LEADER
 
