@@ -33,8 +33,6 @@ def main():
     num_cells = all_data[fixed_offset+9]
     pings_per_ensemble = int.from_bytes(all_data[fixed_offset+10: fixed_offset+12], byteorder='little')
     depth_cell_length = int.from_bytes(all_data[fixed_offset+12: fixed_offset+14], byteorder='little')
-    print('Num beams: ', num_beams)
-    print('Num cells: ', num_cells)
 
     # VARIABLE LEADER
     variable_offset = offsets[1]
@@ -45,9 +43,6 @@ def main():
     roll = int.from_bytes(all_data[variable_offset+22: variable_offset+24], byteorder='little', signed=True)*0.01 #-20 to 20
     salinity = int.from_bytes(all_data[variable_offset+24: variable_offset+26], byteorder='little') #0 to 40 part per thousand
     temperature = int.from_bytes(all_data[variable_offset+26: variable_offset+28], byteorder='little')*0.01 #-5 to 40 degrees
-    print('Transducer depth: ', transducer_depth)
-    print('Heading, pitch, roll: ', heading, pitch, roll)
-    print('Salinity, temp: ', salinity, temperature)
 
     # VELOCITY PROFILE
     velocity_profile_offset = offsets[2]
@@ -61,7 +56,6 @@ def main():
             vel += int.from_bytes(all_data[start_offset + 2*j: start_offset + 2 + 2*j], byteorder='little', signed=True)
         vel = vel/float(num_beams)
         relative_velocities.append(vel)
-    print('Depth cell relative velocities: ', relative_velocities)
 
     # BOTTOM TRACK (abbr. bt) (see page 154)
 
