@@ -4,10 +4,9 @@ import time
 
 COM_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VW9AR-if00-port0' #Pi ADCP
 xbee_port = '/dev/serial/by-id/usb-FTDI_FT231X_USB_UART_DN02Z3LX-if00-port0' #Pi xbee
-# xbee_port = '/dev/tty.usbserial-DN02Z6QY'
-GPS_PORT = '/dev/tty.usbserial-FT8VWDWP'
+GPS_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDWP-if00-port0'
 BAUD_RATE = "115200"
-ser = serial.Serial(COM_PORT, BAUD_RATE, stopbits=serial.STOPBITS_ONE)
+ADCP_ser = serial.Serial(COM_PORT, BAUD_RATE, stopbits=serial.STOPBITS_ONE)
 GPS_ser = serial.Serial(GPS_PORT, bytesize = 8)
 boat_xbee = XBeeDevice(xbee_port, 9600)
 
@@ -20,12 +19,15 @@ def GPS_setup(gps_ser):
 	gps_ser.baudrate = 19200
 	gps_ser.parity = serial.PARITY_NONE
 	gps_ser.stop_bits = serial.STOPBITS_ONE
+	time.sleep(0.1)
+	gps_ser.flushInput()
 	return
 
 def data_received_callback(xbee_message):
 	data = xbee_message.data
 	if data == "STOP":
-		raise Exception("Terminating")
+            print("?")
+            #raise Exception("Terminating")
 	return data
 
 def right_GPS_msg(GPS_msg):
@@ -79,13 +81,13 @@ def discover_xbee(xbee):
 Setup ADCP connection
 '''
 def setup():
-	ser.flush()
+	ADCP_ser.flush()
 	print("Starting ADCP communication")
-	ser.write(b'+++')
+	ADCP_ser.write(b'+++')
 	time.sleep(3)
 	s = read_response()
 	print('Startup message: ', s)
-	return ser
+	return ADCP_ser
 
 '''
 Sends specified command and outputs response
@@ -95,7 +97,7 @@ Inputs:
 	command - in bytes
 '''
 def send(command):
-	ser.write(command + b'\r\n')
+	ADCP_ser.write(command + b'\r\n')
 	s = read_response(ser, verbose=True)
 	return s
 
@@ -106,7 +108,7 @@ def read_response(verbose=False):
 	response = b''
 	cur_line = b''
 	while True:
-		s = ser.read()
+		s = ADCP_ser.read()
 		response += s
 		cur_line += s
 		if verbose and s == b'\n':
@@ -122,29 +124,29 @@ def read_response(verbose=False):
 ###############################################################################
 def start_ping():
 	print("Requesting Pings")
-	ser.write(b'CS\r\n')
-	ser.read(10) #response includes command	
+	ADCP_ser.write(b'CS\r\n')
+	ADCP_ser.read(10) #response includes command	
 
 def stop_ping():
 	print('Stopping Pings')
-	ser.write(b'CSTOP\r\n')
+	ADCP_ser.write(b'CSTOP\r\n')
 	
 def read_ensemble(verbose=False):
-	header = ser.read(2)
+	header = ADCP_ser.read(2)
 	if header != b'\x7f\x7f':
 		print('ERROR no header: ', header)
   
-	num_bytes = ser.read(2)
+	num_bytes = ADCP_ser.read(2)
 	bytes_to_checksum = int.from_bytes(num_bytes, byteorder='little')-4
 	if verbose:
 		print('Num: ', bytes_to_checksum)
 	
-	data = ser.read(bytes_to_checksum)
+	data = ADCP_ser.read(bytes_to_checksum)
 	if verbose:
 		print('Data: ', data)
 
 	#use checksum to verify no errors
-	checksum = ser.read(2)
+	checksum = ADCP_ser.read(2)
 	checksum_int = int.from_bytes(checksum, byteorder='little') 
 	datasum_int = sum(b'\x7f\x7f' + num_bytes + data) % 2**16
 
@@ -163,34 +165,39 @@ def main():
 	# Setting up
 	setup()
 	GPS_setup(GPS_ser)
-	central_xbee = discover_xbee(boat_xbee)
-	boat_xbee.set_sync_ops_timeout(10)
-	boat_xbee.add_data_received_callback(data_received_callback)
+	#central_xbee = discover_xbee(boat_xbee)
+	#boat_xbee.set_sync_ops_timeout(10)
+	#boat_xbee.add_data_received_callback(data_received_callback)
 
-	if central_xbee == None:
-		return
+	#if central_xbee == None:
+		#return
 	
 	start_ping()
+	#time.sleep(0.1)
+	#GPS_ser.flushInput()
 	try:
 		while True:
 			ensemble = read_ensemble(verbose=False)
-			print(ensemble)
+			#print(ensemble)
 
-			# Sending GPS messages			
+			# Sending GPS messages
+			print('ADCP buffer', ADCP_ser.in_waiting)
+			print('GPS buffer', GPS_ser.in_waiting)
 			if GPS_ser.in_waiting > 0:
-				data_str = GPS_ser.readline().decode()
-				if (right_GPS_msg(data_str)):
-					boat_xbee.send_data_async(central_xbee, data_str)
+				data_str = GPS_ser.readline()
+				#print(data_str)
+				#if (right_GPS_msg(data_str)):
+					#boat_xbee.send_data_async(central_xbee, data_str)
 
 			# Sending essential ensemble message
 
-	except:
+	except KeyboardInterrupt:
 		pass
 
 
 	stop_ping()
-	ser.write(b'===')
-	ser.close()
+	ADCP_ser.write(b'===')
+	ADCP_ser.close()
 	boat_xbee.close()
 	GPS_ser.close()
 	f.close()
