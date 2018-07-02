@@ -44,22 +44,18 @@ Input:
 '''
 def data_received_callback(xbee_message):
 	try:
-		if CLOSED == False:
-		    address = xbee_message.remote_device.get_64bit_addr()
-		    data = xbee_message.data.decode()
-		    parsed_data = data.split(',')
+	    address = xbee_message.remote_device.get_64bit_addr()
+	    data = xbee_message.data.decode()
+	    parsed_data = data.split(',')
 
-		    if parsed_data[0] == '$GPGGA':
-		    	print('Received GPS: ', data)
-		    elif parsed_data[0] == '$ADCP':
-		    	print('Received ADCP: ', data)
-		else:
-			end_msg = "STOP".encode()
-			local_xbee.send_data_async(boat_xbee,end_msg)
-			local_xbee.close()
+	    if parsed_data[0] == '$GPGGA':
+	    	print('Received GPS: ', data)
+	    elif parsed_data[0] == '$ADCP':
+	    	print('Received ADCP: ', data)
 	except KeyboardInterrupt:
-		CLOSED = True
-		return
+		print("I'm here!")
+		end_msg = "STOP".encode()
+		local_xbee.send_data_async(boat_xbee,end_msg)
 
 
 ################################################################################
@@ -87,12 +83,13 @@ def main():
 
 	while True:
 		try:
+			print("?")
 			continue
 		except KeyboardInterrupt:
+			local_xbee.del_data_received_callback(data_received_callback)
 			CLOSED = True
 			end_msg = "STOP".encode()
 			local_xbee.send_data_async(boat_xbee,end_msg)
-			local_xbee.close()
 			break
 
 
