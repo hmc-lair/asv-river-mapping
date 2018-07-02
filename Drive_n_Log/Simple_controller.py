@@ -10,6 +10,7 @@ class Simple_controller():
 		self.xbee_port = "/dev/tty.usbserial-DN02Z6QY"
 		self.local_xbee = XBeeDevice(self.xbee_port, 9600)
 		self.local_xbee.open()
+		self.local_xbee.serial_port.reset_input_buffer()
 		self.boat_xbee = []
 
 		self.hem_lat = 'N/A'
@@ -46,14 +47,14 @@ class Simple_controller():
 	Input:
 		xbee_message: messages from the other xbee
 	'''
-	def data_received_callback(xbee_message):
-		data = xbee_message.data
+	def data_received_callback(self,xbee_message):
+		data = xbee_message.data.decode()
 		parsed_data = data.split(',')
 
 		if parsed_data[0] == '$GPGGA':
 			self.last_gps_received = datetime.datetime.now()
 			print('Received GPS: ', data)
-		elif prased_data[0] == '$ADCP':
+		elif parsed_data[0] == '$ADCP':
 			self.adcp_gps_received = datetime.datetime.now()
 			print('Received ADCP: ', data )
 

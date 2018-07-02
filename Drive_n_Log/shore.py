@@ -11,6 +11,7 @@ ser.flush()
 ser.close()
 local_xbee = XBeeDevice("/dev/tty.usbserial-DN02Z6QY", 9600)
 local_xbee.open()
+CLOSED = False
 
 
 ###############################################################################
@@ -42,15 +43,23 @@ Input:
 	xbee_message: messages from the other xbee
 '''
 def data_received_callback(xbee_message):
-    address = xbee_message.remote_device.get_64bit_addr()
-    data = xbee_message.data
-    parsed_data = data.split(',')
+	try:
+		if CLOSED == False:
+		    address = xbee_message.remote_device.get_64bit_addr()
+		    data = xbee_message.data.decode()
+		    parsed_data = data.split(',')
 
-    if parsed_data[0] == '$GPGGA':
-    	print('Received GPS: ', data)
-    elif parsed_data[0] == '$ADCP':
-    	print('Received ADCP: ', data)
-    return
+		    if parsed_data[0] == '$GPGGA':
+		    	print('Received GPS: ', data)
+		    elif parsed_data[0] == '$ADCP':
+		    	print('Received ADCP: ', data)
+		else:
+			end_msg = "STOP".encode()
+			local_xbee.send_data_async(boat_xbee,end_msg)
+			local_xbee.close()
+	except KeyboardInterrupt:
+		CLOSED = True
+		return
 
 
 ################################################################################
@@ -62,7 +71,7 @@ f = open(file_name, 'a+')
 
 
 def main():
-
+	CLOSED = False
 	# Setting up Xbee communication
 	local_xbee.add_data_received_callback(data_received_callback)
 	boat_xbee = discover_boat(local_xbee)
@@ -80,6 +89,10 @@ def main():
 		try:
 			continue
 		except KeyboardInterrupt:
+			CLOSED = True
+			end_msg = "STOP".encode()
+			local_xbee.send_data_async(boat_xbee,end_msg)
+			local_xbee.close()
 			break
 
 
