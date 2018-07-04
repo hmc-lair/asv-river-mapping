@@ -1,13 +1,30 @@
 import struct
 
+
 def main():
+    data = read_file()
+    cur_offset = 0
+    ensemble_num = 1
+    while cur_offset < len(data):
+        cur_offset = read_ensemble(data, cur_offset)
+        print('Ensemble ', ensemble_num)
+        ensemble_num += 1
+        #print('Header?', data[cur_offset:cur_offset+2])
+
+def read_file():
     # READ FILE
-    with open('data/test_results.bin','rb') as f:
+    with open('Log/ADCP_18-07-02 17.27.07.bin','rb') as f:
         all_data = b''
         for line in f.readlines():
             data = line
             all_data += data 
-    # print(all_data)
+    print(all_data[:1000])
+    return all_data
+
+def read_ensemble(data, cur_offset):
+    all_data = data[cur_offset:]
+    num_bytes = int.from_bytes(all_data[2:4], byteorder='little')
+    print('Num bytes: ', num_bytes)
 
     num_types = all_data[5]
     
@@ -23,8 +40,8 @@ def main():
         offset = all_data[6+2*i:8+2*i]
         offset_int = int.from_bytes(offset, byteorder='little')
         offsets.append(offset_int)
-    # print('Offsets: ', offsets)
-    # print('Data IDs: ', [all_data[x:x+2] for x in offsets])
+    #print('Offsets: ', offsets)
+    #print('Data IDs: ', [all_data[x:x+2] for x in offsets])
 
     # FIXED LEADER
     fixed_offset = offsets[0]
@@ -33,6 +50,8 @@ def main():
     num_cells = all_data[fixed_offset+9]
     pings_per_ensemble = int.from_bytes(all_data[fixed_offset+10: fixed_offset+12], byteorder='little')
     depth_cell_length = int.from_bytes(all_data[fixed_offset+12: fixed_offset+14], byteorder='little')
+    coord_transform = all_data[fixed_offset+25]
+    #print('Coord Transform: ', coord_transform)
 
     # VARIABLE LEADER
     variable_offset = offsets[1]
@@ -51,11 +70,16 @@ def main():
     for i in range(num_cells):
         start_offset = velocity_profile_offset + 2 + 2*i
         # Average over beams
-        vel = 0
+        vel = []
         for j in range(num_beams):
-            vel += int.from_bytes(all_data[start_offset + 2*j: start_offset + 2 + 2*j], byteorder='little', signed=True)
-        vel = vel/float(num_beams)
+            curVel = int.from_bytes(all_data[start_offset + 2*j: start_offset + 2 + 2*j], byteorder='little', signed=True)
+            #print('Beam vel', j, curVel)
+            vel.append(curVel)
+        #vel = vel/float(num_beams)
         relative_velocities.append(vel)
+
+    #print('Num cells: ', num_cells)
+    print('Velocity profile: ', relative_velocities)
 
     # BOTTOM TRACK (abbr. bt) (see page 154)
 
@@ -76,9 +100,11 @@ def main():
     max_tracking_depth = int.from_bytes(all_data[bt_offset+70:bt_offset+72], byteorder = 'little')
 
     for i in range(4):
-        bt_ranges.append(int.from_bytes(all_data[bt_offset+16+i*2:bt_offset+18+i*2], byteorder = 'little'))
+        bt_ranges.append(int.from_bytes(all_data[bt_offset+16+i*2:bt_offset+18+i*2], byteorder = 'little')*.01)
         bt_velocities.append(int.from_bytes(all_data[bt_offset+24+i*2:bt_offset+26+i*2], byteorder = 'little'))
         beam_percent_good.append(all_data[bt_offset+40+i])
+
+    #print('BT values: ', bt_ranges, bt_velocities, beam_percent_good)
 
     # VERTICAL BEAM RANGE
     vb_offset = offsets[8]
@@ -100,6 +126,8 @@ def main():
         GPS_msg.append(all_data[g_offset+15: g_offset+15+msg_size])
 
     delta_times_double = [struct.unpack('d', b)[0] for b in delta_times_bytes] # convert to double
+    print('Start:', cur_offset)
+    return cur_offset + num_bytes + 2
 
 if __name__ == '__main__':
     main()
