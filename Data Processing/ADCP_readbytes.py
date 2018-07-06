@@ -1,7 +1,7 @@
 import struct
 
 def main():
-    data = read_ADCP_file('../PI/Log/ADCP_18-07-02 17.27.07.bin')
+    data = read_ADCP_file('Log/ADCP_18-07-02 17.27.07.bin')
     cur_offset = 0
     ensemble_num = 1
     while cur_offset < len(data):
@@ -25,6 +25,9 @@ def read_ensemble(data, cur_offset):
     # print('Num bytes: ', num_bytes)
 
     num_types = all_data[5]
+
+    return_data = [] # current offset, roll, pitch, yaw
+                    # depth cell length, velocities, depth, bottom track, GPS
     
     # OFFSETS
     # 1. Fix Leader
@@ -40,6 +43,7 @@ def read_ensemble(data, cur_offset):
         offsets.append(offset_int)
     # print('Offsets: ', offsets)
     # print('Data IDs: ', [all_data[x:x+2] for x in offsets])
+    # print('Data types:', num_types)
 
     # FIXED LEADER
     fixed_offset = offsets[0]
@@ -47,9 +51,10 @@ def read_ensemble(data, cur_offset):
     num_beams = all_data[fixed_offset+8]
     num_cells = all_data[fixed_offset+9]
     pings_per_ensemble = int.from_bytes(all_data[fixed_offset+10: fixed_offset+12], byteorder='little')
-    depth_cell_length = int.from_bytes(all_data[fixed_offset+12: fixed_offset+14], byteorder='little')
+    depth_cell_length = int.from_bytes(all_data[fixed_offset+12: fixed_offset+14], byteorder='little') # cm
     coord_transform = all_data[fixed_offset+25]
     # print('Coord Transform: ', coord_transform)
+    print('Depth cell length', depth_cell_length)
 
     # VARIABLE LEADER
     variable_offset = offsets[1]
@@ -75,8 +80,8 @@ def read_ensemble(data, cur_offset):
             vel.append(curVel)
         #vel = vel/float(num_beams)
         relative_velocities.append(vel)
-
-    # print('Num cells: ', num_cells)
+    # print(relative_velocities)
+    print('Num cells: ', num_cells)
     # print('Velocity profile: ', relative_velocities)
 
     # BOTTOM TRACK (abbr. bt) (see page 154)
@@ -124,7 +129,13 @@ def read_ensemble(data, cur_offset):
         GPS_msg.append(all_data[g_offset+15: g_offset+15+msg_size])
 
     delta_times_double = [struct.unpack('d', b)[0] for b in delta_times_bytes] # convert to double
-
+    
+    # return_data = [current_offset + num_bytes + 2, roll, pitch, yaw, depth_cell_length, 
+    #     relative_velocities]
+    # print("delta time," ,msg_types)
+    # print('GPS:', GPS_msg)
+    # print('Vertical beam range:', vb_range)
+    
     return cur_offset + num_bytes + 2
 
 if __name__ == '__main__':
