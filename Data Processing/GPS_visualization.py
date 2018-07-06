@@ -35,7 +35,7 @@ def read_GPS_file(filename):
                 x, y, _, _ = utm.from_latlon(lat, lon)
                 all_data.append((x, y))
     # print(all_data)
-    print(timestamps)
+    # print(timestamps)
     return all_data, timestamps
 
 def str_to_coord(coord_str):
