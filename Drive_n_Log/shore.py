@@ -83,7 +83,7 @@ def main():
 
 	while True:
 		try:
-			print("?")
+			# print("?")
 			continue
 		except KeyboardInterrupt:
 			local_xbee.del_data_received_callback(data_received_callback)
