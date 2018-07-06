@@ -42,7 +42,8 @@ def read_ensemble(data, cur_offset):
         offset_int = int.from_bytes(offset, byteorder='little')
         offsets.append(offset_int)
     # print('Offsets: ', offsets)
-    print('Data IDs: ', [all_data[x:x+2] for x in offsets])
+    # print('Data IDs: ', [all_data[x:x+2] for x in offsets])
+    # print('Data types:', num_types)
 
     # FIXED LEADER
     fixed_offset = offsets[0]
@@ -132,6 +133,7 @@ def read_ensemble(data, cur_offset):
     # return_data = [current_offset + num_bytes + 2, roll, pitch, yaw, depth_cell_length, 
     #     relative_velocities]
     # print("delta time," ,msg_types)
+    # print('GPS:', GPS_msg)
     # print('Vertical beam range:', vb_range)
     
     return cur_offset + num_bytes + 2
