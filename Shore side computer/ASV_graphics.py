@@ -1,11 +1,25 @@
-from tkinter import *
+from Tkinter import *
 from PIL import Image, ImageTk
 
-MAP_WIDTH = 600
-MAP_HEIGHT = 400
+import gdal
+import utm
+
+MAP_WIDTH = 1000
+MAP_HEIGHT = 800
+IMAGE_WIDTH = 1000
+IMAGE_HEIGHT = 800
+MAP_FILE = '../Maps/river_section.tif'
 
 class ASV_graphics:
 	def __init__(self, environment):
+		# Load map for GPS conversions
+		dataset = gdal.Open(MAP_FILE)
+		data = dataset.ReadAsArray()
+
+		self.geo_trans = dataset.GetGeoTransform()
+		self.inv_trans = gdal.InvGeoTransform(self.geo_trans)
+
+		# Set up GUI
 		self.environment = environment
 		self.tk = Tk()
 
@@ -15,28 +29,29 @@ class ASV_graphics:
 		self.sidebar = Frame(self.tk, width=300, bg='white', height=500, relief='sunken', borderwidth=2)
 		self.sidebar.pack(expand=True, fill='both', side='left', anchor='nw')
 
-		# self.gps = Label(self.sidebar, anchor='w', text='Latitude: ???\nLongitude: ???\nHeading: ???\n')
-		# self.gps.grid(row=0, column=0)
-		# self.gps.pack()
+		self.gps = Label(self.sidebar, anchor='w', text='Latitude: ???\nLongitude: ???\nHeading: ???\n')
+		self.gps.grid(row=0, column=0)
+		self.gps.pack()
 
 		# main content area
 		self.map_frame = Frame(self.tk)
 		self.map_frame.pack(expand=True, fill='both', side='right')
 
-		pilImg = Image.open('test_map.tiff')
+		pilImg = Image.open(MAP_FILE)
 		pilImg = pilImg.resize((MAP_WIDTH,MAP_HEIGHT), Image.ANTIALIAS)
 		self.img = ImageTk.PhotoImage(pilImg)
 
 		#function to be called when mouse is clicked
-		def printcoords(event):
-			print(event.x,event.y)
+		def on_location_click(event):
+			print(event.x, event.y)
+			self.go_to_location(event.x, event.y)
 
 		self.canvas = Canvas(self.map_frame, width=MAP_WIDTH, height=MAP_HEIGHT)
 		self.canvas.create_image(0,0, image=self.img, anchor=NW)
 		walls = self.canvas.create_rectangle(150, 100, 400, 300,outline='red')
 		self.canvas.grid(row=0,column=0, columnspan = 2)
 		self.canvas.pack()
-		self.canvas.bind("<Button 1>",printcoords)
+		self.canvas.bind("<Button 1>",on_location_click)
 
 		self.control = Label(self.map_frame, anchor='w', text='Latitude: ???\nLongitude: ???\nHeading: ???')
 		self.control.pack(side='left')
@@ -82,6 +97,15 @@ class ASV_graphics:
 
 	def greet(self):
 		print("Greetings!")
+
+	#Go to location specified by mouse click (pixel coords -> GPS)
+	def go_to_location(self, row, col):
+		x, y = gdal.ApplyGeoTransform(self.geo_trans, row, col)
+		print('UTM: ', x, y)
+		lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
+		print('Lat/lon: ', lat, lon)
+		return
+
 
 if __name__ == '__main__':
 	my_gui = ASV_graphics(None)

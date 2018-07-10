@@ -16,12 +16,31 @@ GPS_file = '../PI/Log/GPS_18-07-02 17.27.07.txt'
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
 map_file = '../Maps/kern_river.tif'
 
+# Plot parameters
+CELL_RES = 1
+win = 5
+sigma_slope = 0.1204
+sigma_offset = 0.6142
+
+###############################################################################
+# Map Helper Functions
+###############################################################################
+
+def load_map(filename):
+    dataset = gdal.Open(filename)
+    data = dataset.ReadAsArray()
+    geo_trans = dataset.GetGeoTransform()
+    inv_trans = gdal.InvGeoTransform(geo_trans)
+
+    img = mpimg.imread(filename)
+    return img, inv_trans
+
 ###############################################################################
 # GPS File Processing
 ###############################################################################
 
 # Returns UTM coordinates from GPS data
-def read_GPS_file(filename):
+def read_GPS_file(filename, inv_trans):
     all_data = []
     timestamps = []
     with open(filename, 'r') as f:
@@ -34,9 +53,15 @@ def read_GPS_file(filename):
                 lon = -str_to_coord(lon_str) #W = negative, generalize later
                 x, y, _, _ = utm.from_latlon(lat, lon)
                 all_data.append((x, y))
-    # print(all_data)
-    # print(timestamps)
-    return all_data, timestamps
+    
+    ASV_X = []
+    ASV_Y = []
+    for x, y in all_data:
+        row,col = gdal.ApplyGeoTransform(inv_trans, x, y)
+        ASV_X.append(row)
+        ASV_Y.append(col)
+
+    return ASV_X, ASV_Y, timestamps
 
 def str_to_coord(coord_str):
     if len(coord_str) == 12:
@@ -46,82 +71,101 @@ def str_to_coord(coord_str):
     return deg + minutes
 
 ###############################################################################
-# Map Helper Functions
+# ADCP File Processing
 ###############################################################################
 
-def load_map(filename):
-    dataset = gdal.Open(filename)
-    data = dataset.ReadAsArray()
-
-    geo_trans = dataset.GetGeoTransform()
-    inv_trans = gdal.InvGeoTransform(geo_trans)
-
-    #Plot
-    img = mpimg.imread(filename)
-    return img, inv_trans
-
-###############################################################################
-
-#Read data from 1 trial
-def main():
-    #GPS DATA
-    img, inv_trans = load_map(map_file)
-    ASV_pos, GPS_timestamps = read_GPS_file(GPS_file)
-
-    ASV_X = []
-    ASV_Y = []
-    for x, y in ASV_pos:
-        row,col = gdal.ApplyGeoTransform(inv_trans, x, y)
-        ASV_X.append(row)
-        ASV_Y.append(col)
-    plt.plot(ASV_X, ASV_Y, color='black')
-
-    #ADCP DATA
-    with open(depths_file, 'r') as f:
+def read_ADCP_file(filename, num_measurements):
+    with open(filename, 'r') as f:
         depths = f.readline().split(',')[:-1]
     with open(timestamps_file,'r') as f:
         ADCP_timestamps = f.readline().split(',')[:-1]
     ADCP_timestamps = [int(t) for t in ADCP_timestamps]
 
-    #Method 1: Assume start readings at same time, equal spacing
-    ratio = float(len(depths))/len(ASV_X)
-    depths_down = np.zeros(len(ASV_X))
-    for i in range(len(ASV_X)):
+    ratio = float(len(depths))/num_measurements
+
+    depths_down = np.zeros(num_measurements) #downsample
+    for i in range(num_measurements):
         depths_down[i] = depths[int(i*ratio)]
 
-    X = np.asarray(ASV_X)
-    Y = np.asarray(ASV_Y)
-    Z = -depths_down
+    return -depths_down #depths are negative
 
-    #Method 2: Assume sensors have same clock
-    # X = []
-    # Y = []
-    # Z = []
-    # for i in range(len(GPS_timestamps)):
-    #     if GPS_timestamps[i] in ADCP_timestamps: # if we have both GPS and ADCP data
-    #         X.append(ASV_X[i])
-    #         Y.append(ASV_Y[i])
-    #         Z.append(-float(depths[i]))
-    # X = np.asarray(X)
-    # Y = np.asarray(Y)
-    # Z = np.asarray(Z)
+###############################################################################
 
-    #Plot
-    imgplot = plt.imshow(img)
+#Read data from 1 trial
+def main():
+    img, inv_trans = load_map(map_file)
 
-    # create x-y points to be used in heatmap
-    xi = np.linspace(X.min(),X.max(),1000)
-    yi = np.linspace(Y.min(),Y.max(),1000)
+    #GPS DATA
+    ASV_X, ASV_Y, GPS_timestamps = read_GPS_file(GPS_file, inv_trans)
+    num_measurements = len(ASV_X)
 
-    # Z is a matrix of x-y values
-    zi = griddata((X, Y), Z, (xi[None,:], yi[:,None]), method='linear')
+    #ADCP DATA
+    Z = read_ADCP_file(depths_file, num_measurements) #Z = water depths
+    min_depth = Z.min()
 
-    # Create the contour plot
-    plt.contourf(xi, yi, zi, 10, cmap=plt.cm.rainbow)
-    plt.colorbar()
-    #ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    #surf = ax1.scatter(X, Y, Z, cmap=cm.viridis)
-    
+    #Normalize positions
+    min_x = min(ASV_X)
+    min_y = min(ASV_Y)
+    X = [v - min_x for v in ASV_X]
+    Y = [v - min_y for v in ASV_Y]
+    max_x = max(X)
+    max_y = max(Y)
+    print('Max vals:', max_x, max_y)
+
+    # Method 0: 1D Kalman Filter
+    m = int(np.ceil(max_x/CELL_RES))
+    n = int(np.ceil(max_y/CELL_RES))
+    baseFloor = min_depth
+    B = baseFloor*np.ones((m,n))
+    Bvar = np.zeros((m,n))
+
+    for t in range(num_measurements):
+        cur_x = X[t]
+        cur_y = Y[t]
+        cur_alt = Z[t]
+
+        i = int(np.floor(cur_x/CELL_RES))
+        j = int(np.floor(cur_y/CELL_RES))
+
+        for k in range(max(0,i-win), min(m, i+win)):
+            for l in range(max(0,j-win), min(n,j+win)):
+                dist2 = 0.1+CELL_RES*((k-i)**2+(l-j)**2)**0.5
+                    
+                if B[k][l] == baseFloor:
+                    B[k][l] = cur_alt
+                    Bvar[k][l] = (dist2*sigma_slope+sigma_offset)**2
+                else:
+                    var = (dist2*sigma_slope+sigma_offset)**2
+                    cur_K = float(Bvar[k][l])/(Bvar[k][l] + var)
+                    B[k][l] = B[k][l]+cur_K*(cur_alt - B[k][l])
+                    Bvar[k][l] = Bvar[k][l]-cur_K*Bvar[k][l];
+
+    # Method 1: Linear Interpolation
+    # xi, yi = np.mgrid[X.min():X.max():1000j, Y.min():Y.max():1000j]
+
+    # # Z is a matrix of x-y values
+    # points = []
+    # for i in range(len(X)):
+    #     points.append([X[i],Y[i]])
+
+    # zi = griddata(points, Z, (xi, yi), method='linear')
+    # for i in range(len(zi)):
+    #     for j in range(len(zi[0])):
+    #         if np.isnan(zi[i][j]):
+    #             zi[i][j] = min_depth
+
+    ###########################################################################
+    # PLOTS
+    # 1) Map w/ ASV path
+    # imgplot = plt.imshow(img)
+    # plt.plot(ASV_X, ASV_Y, color='black')
+    # plt.contourf(xi, yi, zi, 10, cmap=plt.cm.rainbow)
+
+    # 2) Depth surface map
+    X, Y = np.meshgrid(np.arange(n), np.arange(m))
+    ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
+    surf = ax1.plot_surface(X, Y, B, cmap=cm.viridis)
+
     plt.show()
 
 if __name__ == '__main__':
