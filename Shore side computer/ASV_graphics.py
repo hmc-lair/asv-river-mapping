@@ -71,10 +71,22 @@ class ASV_graphics:
 			self.location_select_mode = False
 			self.goto.configure(text='Go to Map Location')
 
-		# Go to location on map
+		# Function to be called for emergency stop
+		def on_stop():
+			#TODO: Stop motors
+			print('Motors stopped!')
+			pass
+
+		# Buttons
+		# Go to map location
 		self.goto = Button(self.sidebar_frame, anchor='w', text='Go to Map Location', command=on_toggle_goto)
 		self.goto.grid(row=1, column=0)
 		self.goto.pack()
+
+		# Emergency stop
+		self.stop = Button(self.sidebar_frame, anchor='w', text='STOP ASV', command=on_stop)
+		self.stop.grid(row=2, column=0)
+		self.stop.pack()
 
 		# Load map image
 		pilImg = Image.open(MAP_FILE)
