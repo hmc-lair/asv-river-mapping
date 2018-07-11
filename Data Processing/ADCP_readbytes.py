@@ -1,11 +1,13 @@
 import struct
 
 def main():
-    data = read_ADCP_file('Log/ADCP_18-07-02 17.27.07.bin')
+    data = read_ADCP_file('Log/ADCP_18-07-02 17.27.07.bin') # river
+    # data = read_ADCP_file('Log/ADCP_18-07-02 17.33.22.bin')
     cur_offset = 0
     ensemble_num = 1
     while cur_offset < len(data):
-        cur_offset = read_ensemble(data, cur_offset)
+        return_val = read_ensemble(data, cur_offset)
+        cur_offset = return_val[0]
         print('Ensemble ', ensemble_num)
         ensemble_num += 1
 
@@ -23,11 +25,10 @@ def read_ensemble(data, cur_offset):
     all_data = data[cur_offset:]
     num_bytes = int.from_bytes(all_data[2:4], byteorder='little')
     # print('Num bytes: ', num_bytes)
-
     num_types = all_data[5]
 
     return_data = [] # current offset, roll, pitch, yaw
-                    # depth cell length, velocities, depth, bottom track, GPS
+                    # depth cell length, velocities, bt_range, bt_velocity, GPS
     
     # OFFSETS
     # 1. Fix Leader
@@ -53,8 +54,8 @@ def read_ensemble(data, cur_offset):
     pings_per_ensemble = int.from_bytes(all_data[fixed_offset+10: fixed_offset+12], byteorder='little')
     depth_cell_length = int.from_bytes(all_data[fixed_offset+12: fixed_offset+14], byteorder='little') # cm
     coord_transform = all_data[fixed_offset+25]
-    # print('Coord Transform: ', coord_transform)
-    print('Depth cell length', depth_cell_length)
+    print('Coord Transform: ', coord_transform)
+    # print('Depth cell length', depth_cell_length)
 
     # VARIABLE LEADER
     variable_offset = offsets[1]
@@ -81,7 +82,7 @@ def read_ensemble(data, cur_offset):
         #vel = vel/float(num_beams)
         relative_velocities.append(vel)
     # print(relative_velocities)
-    print('Num cells: ', num_cells)
+    # print('Num cells: ', num_cells)
     # print('Velocity profile: ', relative_velocities)
 
     # BOTTOM TRACK (abbr. bt) (see page 154)
@@ -101,42 +102,53 @@ def read_ensemble(data, cur_offset):
     bt_velocities = [] # there are one more velocity data.. though not sure what it's for?
     beam_percent_good = []
     max_tracking_depth = int.from_bytes(all_data[bt_offset+70:bt_offset+72], byteorder = 'little')
-
+    bt_error_vel_max = int.from_bytes(all_data[bt_offset + 10:bt_offset+12], byteorder = 'little')
     for i in range(4):
         bt_ranges.append(int.from_bytes(all_data[bt_offset+16+i*2:bt_offset+18+i*2], byteorder = 'little')*.01)
-        bt_velocities.append(int.from_bytes(all_data[bt_offset+24+i*2:bt_offset+26+i*2], byteorder = 'little'))
+        bt_velocities.append(int.from_bytes(all_data[bt_offset+24+i*2:bt_offset+26+i*2], byteorder = 'little',signed=True))
         beam_percent_good.append(all_data[bt_offset+40+i])
 
-    print('BT values: ', bt_ranges, bt_velocities, beam_percent_good)
+    # print('BT values: ', bt_ranges, bt_velocities, beam_percent_good)
+    # print('bt beam 1 corr magnitude', bt_correlation_mag)
+    # print('bt pings/ensemble ', bt_pings_per_ensemble)
+    # print('error max value', bt_error_vel_max)
 
     # VERTICAL BEAM RANGE
     vb_offset = offsets[8]
     vb_range = int.from_bytes(all_data[vb_offset+4:vb_offset+8], byteorder = 'little') # in millimeter
 
-    # GPS Data
-    GPS_offsets = offsets[9:13]
-    msg_types = []
-    msg_sizes = []
-    delta_times_bytes = []
-    delta_times_double = [] # difference between GPS message and ensemble
-    GPS_msg = []
+    time_stamp = ''
+    if num_types == 16:
+        # GPS Data
+        GPS_offsets = offsets[13:15]
+        msg_types = []
+        msg_sizes = []
+        delta_times_bytes = []
+        delta_times_double = [] # difference between GPS message and ensemble
+        GPS_msg = []
 
-    for g_offset in GPS_offsets:
-        msg_size = int.from_bytes(all_data[g_offset+4:g_offset+6], byteorder = 'little')
-        msg_types.append(int.from_bytes(all_data[g_offset+2:g_offset+4], byteorder = 'little'))
-        msg_sizes.append(msg_size)
-        delta_times_bytes.append(all_data[g_offset+6:g_offset+14])
-        GPS_msg.append(all_data[g_offset+15: g_offset+15+msg_size])
+        for g_offset in GPS_offsets:
+            msg_size = int.from_bytes(all_data[g_offset+4:g_offset+6], byteorder = 'little')
+            msg_types.append(int.from_bytes(all_data[g_offset+2:g_offset+4], byteorder = 'little'))
+            msg_sizes.append(msg_size)
+            delta_times_bytes.append(all_data[g_offset+6:g_offset+14])
+            GPS_msg.append(all_data[g_offset+15: g_offset+15+msg_size])
 
-    delta_times_double = [struct.unpack('d', b)[0] for b in delta_times_bytes] # convert to double
-    
+        time_stamp = GPS_msg[0].decode().split(',')[1]
+
+        delta_times_double = [struct.unpack('d', b)[0] for b in delta_times_bytes] # convert to double
+        # print('GPS_msg: ', GPS_msg)
+        # print('Delta ts: ', delta_times_double )
     # return_data = [current_offset + num_bytes + 2, roll, pitch, yaw, depth_cell_length, 
     #     relative_velocities]
     # print("delta time," ,msg_types)
     # print('GPS:', GPS_msg)
     # print('Vertical beam range:', vb_range)
-    
-    return cur_offset + num_bytes + 2
+    return_offset = cur_offset + num_bytes + 2
+    return_data = [return_offset, roll, pitch, heading, depth_cell_length, 
+        relative_velocities, bt_velocities, time_stamp]
+
+    return return_data
 
 if __name__ == '__main__':
     main()
