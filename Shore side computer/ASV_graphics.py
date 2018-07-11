@@ -12,91 +12,82 @@ MAP_FILE = '../Maps/river_section.tif'
 
 class ASV_graphics:
 	def __init__(self, environment):
-		# Load map for GPS conversions
+		# Load map for display/GPS conversions
 		dataset = gdal.Open(MAP_FILE)
 		data = dataset.ReadAsArray()
-
 		self.geo_trans = dataset.GetGeoTransform()
 		self.inv_trans = gdal.InvGeoTransform(self.geo_trans)
 
 		# Set up GUI
 		self.environment = environment
 		self.tk = Tk()
-
 		self.tk.title("ASV Control Interface")
 
-		# sidebar
-		self.sidebar = Frame(self.tk, width=300, bg='white', height=500, relief='sunken', borderwidth=2)
-		self.sidebar.pack(expand=True, fill='both', side='left', anchor='nw')
+		# Frames: Sidebar + Map Area
+		self.sidebar_frame = Frame(self.tk, width=300, bg='white', height=500, relief='sunken', borderwidth=2)
+		self.map_frame = Frame(self.tk)
+		self.sidebar_frame.pack(expand=True, fill='both', side='left', anchor='nw')
+		self.map_frame.pack(expand=True, fill='both', side='right')
 
-		self.gps = Label(self.sidebar, anchor='w', text='Latitude: ???\nLongitude: ???\nHeading: ???\n')
+		# GPS Coordinates
+		self.gps = Label(self.sidebar_frame, anchor='w', width=30, text='Latitude: ???\nLongitude: ???\nHeading: ???\n')
 		self.gps.grid(row=0, column=0)
 		self.gps.pack()
 
-		# main content area
-		self.map_frame = Frame(self.tk)
-		self.map_frame.pack(expand=True, fill='both', side='right')
+		# Position variables
+		self.cur_pos = None
+		self.target_pos = None
+		self.location_select_mode = False
 
+		# Callbacks
+		# Function to be called when "Go to location" clicked
+		def on_toggle_goto():
+			if self.location_select_mode:
+				self.location_select_mode = False
+				self.goto.configure(text='Go to Map Location')
+			else:
+				self.location_select_mode = True
+				self.goto.configure(text='Select Map Location...')
+			print('Mode: ', self.location_select_mode)
+
+		# Function to be called when map location clicked
+		def on_location_click(event):
+			if self.location_select_mode == False:
+				return
+
+			print(event.x, event.y)
+			if self.target_pos == None:
+				x1, y1 = (event.x - 5), (event.y - 5)
+				x2, y2 = (event.x + 5), (event.y + 5)
+				self.target_pos = self.canvas.create_oval(x1, y1, x2, y2, fill='red')
+			else:
+				old_pos = self.canvas.coords(self.target_pos)
+				dx = event.x - (old_pos[0] + 5)
+				dy = event.y - (old_pos[1] + 5)
+				self.canvas.move(self.target_pos, dx, dy)
+			self.go_to_location(event.x, event.y)
+
+			# Reset button
+			self.location_select_mode = False
+			self.goto.configure(text='Go to Map Location')
+
+		# Go to location on map
+		self.goto = Button(self.sidebar_frame, anchor='w', text='Go to Map Location', command=on_toggle_goto)
+		self.goto.grid(row=1, column=0)
+		self.goto.pack()
+
+		# Load map image
 		pilImg = Image.open(MAP_FILE)
 		pilImg = pilImg.resize((MAP_WIDTH,MAP_HEIGHT), Image.ANTIALIAS)
 		self.img = ImageTk.PhotoImage(pilImg)
-
-		#function to be called when mouse is clicked
-		def on_location_click(event):
-			print(event.x, event.y)
-			self.go_to_location(event.x, event.y)
-
+		
+		# map
 		self.canvas = Canvas(self.map_frame, width=MAP_WIDTH, height=MAP_HEIGHT)
 		self.canvas.create_image(0,0, image=self.img, anchor=NW)
-		walls = self.canvas.create_rectangle(150, 100, 400, 300,outline='red')
+		#walls = self.canvas.create_rectangle(150, 100, 400, 300,outline='red')
 		self.canvas.grid(row=0,column=0, columnspan = 2)
 		self.canvas.pack()
-		self.canvas.bind("<Button 1>",on_location_click)
-
-		self.control = Label(self.map_frame, anchor='w', text='Latitude: ???\nLongitude: ???\nHeading: ???')
-		self.control.pack(side='left')
-
-		self.deploy = Button(self.map_frame, anchor='w', text='Deploy')
-		self.deploy.pack(side='right')
-
-		#######################################################################
-
-		# MENU
-		def donothing():
-			return
-		menubar = Menu(self.tk)
-		filemenu = Menu(menubar, tearoff=0)
-		filemenu.add_command(label="New", command=donothing)
-		filemenu.add_command(label="Open", command=donothing)
-		filemenu.add_command(label="Save", command=donothing)
-		filemenu.add_command(label="Save as...", command=donothing)
-		filemenu.add_command(label="hihihihihiihi", command=donothing)
-
-		filemenu.add_separator()
-
-		filemenu.add_command(label="Exit", command=self.tk.quit)
-		menubar.add_cascade(label="File", menu=filemenu)
-		editmenu = Menu(menubar, tearoff=0)
-		editmenu.add_command(label="Undo", command=donothing)
-
-		editmenu.add_separator()
-
-		editmenu.add_command(label="Cut", command=donothing)
-		editmenu.add_command(label="Copy", command=donothing)
-		editmenu.add_command(label="Paste", command=donothing)
-		editmenu.add_command(label="Delete", command=donothing)
-		editmenu.add_command(label="Select All", command=donothing)
-
-		menubar.add_cascade(label="Edit", menu=editmenu)
-		helpmenu = Menu(menubar, tearoff=0)
-		helpmenu.add_command(label="Help Index", command=donothing)
-		helpmenu.add_command(label="About...", command=donothing)
-		menubar.add_cascade(label="Help", menu=helpmenu)
-
-		self.tk.config(menu=menubar)
-
-	def greet(self):
-		print("Greetings!")
+		self.canvas.bind("<Button 1>", on_location_click)
 
 	#Go to location specified by mouse click (pixel coords -> GPS)
 	def go_to_location(self, row, col):
@@ -104,7 +95,33 @@ class ASV_graphics:
 		print('UTM: ', x, y)
 		lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
 		print('Lat/lon: ', lat, lon)
+
+		#TODO: Send command to ASV to move to x, y
 		return
+
+	#Update readings
+	def update_GPS(self, lat, lon, heading):
+		self.gps.configure(text='Latitude: ' + str(lat) + 
+			'\nLongitude: ' + str(lon) + '\nHeading: ' + str(heading) + '\n')
+		x, y,_, _ = utm.from_latlon(lat, lon)
+		col, row = gdal.ApplyGeoTransform(self.inv_trans, x, y)
+		if self.cur_pos == None:
+			x1, y1 = (col - 5), (row - 5)
+			x2, y2 = (col + 5), (row + 5)
+			self.cur_pos = self.canvas.create_oval(x1, y1, x2, y2, fill='green')
+		else:
+			old_pos = self.canvas.coords(self.cur_pos)
+			dx = col - (old_pos[0] + 5)
+			dy = row - (old_pos[1] + 5)
+			self.canvas.move(self.cur_pos, dx, dy)
+
+	def update_ADCP(self):
+		pass
+
+	#Display ASV path plan 
+	# positions: (row,col)
+	def show_path(self, positions):
+		pass
 
 
 if __name__ == '__main__':
