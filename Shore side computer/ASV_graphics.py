@@ -100,6 +100,12 @@ class ASV_graphics:
         self.canvas.pack()
         self.canvas.bind("<Button 1>", on_location_click)
 
+    # called at every iteration of main loop
+    def update(self):
+        # update the graphics
+        self.tk.update()
+        return True
+
     #Go to location specified by mouse click (pixel coords -> GPS)
     def go_to_location(self, row, col):
         x, y = gdal.ApplyGeoTransform(self.geo_trans, row, col)

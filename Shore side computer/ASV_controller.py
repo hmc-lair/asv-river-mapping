@@ -18,8 +18,8 @@ class ASV_Controller:
         self.boat_xbee = None # no ASV xbee yet
 
         # Setting up Xbee communication
-        self.local_xbee.add_data_received_callback(data_received_callback)
-        discover_boat(local_xbee)
+        self.local_xbee.add_data_received_callback(self.data_received_callback)
+        self.discover_boat(self.local_xbee)
         if self.boat_xbee == None:
             print('device not found!')
             return
@@ -42,7 +42,7 @@ class ASV_Controller:
     Output:
         boat_xbee(XBeeDevice): None if there is nothing
     '''
-    def discover_boat(xbee):
+    def discover_boat(self, xbee):
         print('Discovering device')
         xbee_network = xbee.get_network()
         xbee_network.start_discovery_process()
@@ -57,7 +57,7 @@ class ASV_Controller:
     Input:
         xbee_message: messages from the other xbee
     '''
-    def data_received_callback(xbee_message):
+    def data_received_callback(self, xbee_message):
         try:
             address = xbee_message.remote_device.get_64bit_addr()
             data = xbee_message.data.decode()
@@ -75,7 +75,7 @@ class ASV_Controller:
     def quit(self):
         print("Shutting sytem down...")
         end_msg = "STOP".encode()
-        self.local_xbee.send_data_async(boat_xbee,end_msg)
+        self.local_xbee.send_data_async(self.boat_xbee,end_msg)
         time.sleep(1)
         self.local_xbee.close() 
         exit(1)
