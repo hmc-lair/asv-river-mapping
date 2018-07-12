@@ -4,12 +4,17 @@ import gdal
 import utm
 
 #Milikan pond is 170x110
+IMAGE_WIDTH = 170
+IMAGE_HEIGHT = 100
+MAP_FILE = '../Maps/milikan_pond.tif'
 
-MAP_WIDTH = 1000
-MAP_HEIGHT = 800
-IMAGE_WIDTH = 1000
-IMAGE_HEIGHT = 800
-MAP_FILE = '../Maps/river_section.tif'
+
+# IMAGE_WIDTH = 1000
+# IMAGE_HEIGHT = 800
+# MAP_FILE = '../Maps/river_section.tif'
+
+MAP_WIDTH = IMAGE_WIDTH
+MAP_HEIGHT = IMAGE_HEIGHT
 
 class ASV_graphics:
     def __init__(self, environment):
@@ -23,6 +28,7 @@ class ASV_graphics:
         self.environment = environment
         self.tk = Tk()
         self.tk.title("ASV Control Interface")
+        self.quit_gui = False
 
         # Frames: Sidebar + Map Area
         self.sidebar_frame = Frame(self.tk, width=300, bg='white', height=500, relief='sunken', borderwidth=2)
@@ -56,7 +62,7 @@ class ASV_graphics:
         self.goto = Button(self.sidebar_frame, anchor='w', text='Go to Map Location', command=self.on_toggle_goto)
         self.goto.pack()
         self.stop = Button(self.sidebar_frame, anchor='w', text='Stop ASV', command=self.on_stop).pack()
-        self.quit = Button(self.sidebar_frame, anchor='w', text='Quit Gui', command=self.on_quit).pack()
+        self.quit = Button(self.sidebar_frame, anchor='w', text='QUIT GUI', command=self.on_quit).pack()
 
         # Load map image
         pilImg = Image.open(MAP_FILE)
@@ -111,6 +117,8 @@ class ASV_graphics:
     def on_quit(self):
         print('QUIT!')
         self.on_stop()
+        self.tk.destroy()
+        self.quit_gui = True
 
     ###########################################################################
     # Updating GUI
@@ -124,7 +132,7 @@ class ASV_graphics:
         # update the graphics
         self.tk.update()
 
-        return True
+        return self.quit_gui == True
 
     def update_GPS(self):
         lat = self.environment.robot.lat
