@@ -1,8 +1,11 @@
 # Test drive around in RC mode and write the ADCP raw data to a file
 from digi.xbee.devices import XBeeDevice
+from tkinter import *
 import time
 import datetime
 import serial
+
+from ASV_graphics import *
 
 # initialize xbee
 node_name = 'boat'
@@ -76,6 +79,10 @@ def main():
 		return
 	else:
 		print('device found! Sending start messages')
+
+	# Set up GUI
+	gui = ASV_graphics(None)
+	gui.tk.mainloop()
 
 	# Sending start command to the boat
 	start_msg = "START".encode()
