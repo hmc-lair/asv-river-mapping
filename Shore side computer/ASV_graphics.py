@@ -155,7 +155,7 @@ class ASV_graphics:
         current = self.controller.v_boat
 
         self.adcp_depth['text'] = 'Water depth: %f' % (depth)
-        self.adcp_current['text'] = "Current speed" % (current)
+        self.adcp_current['text'] = "Current speed: " % (current)
 
     ###########################################################################
     # ASV Commands
