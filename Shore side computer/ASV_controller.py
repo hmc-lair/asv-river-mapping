@@ -12,6 +12,10 @@ class ASV_Controller:
         # robot state
         self.robot = ASV_state()
 
+        # ADCP measuremens
+        self.depth = 0.0
+        self.v_boat = 0.0
+
         # initialize xbee
         ser = serial.Serial("/dev/tty.usbserial-DN02Z6QY", 9600)
         ser.flush()
@@ -66,15 +70,14 @@ class ASV_Controller:
             data = xbee_message.data.decode()
             parsed_data = data.split(',')
 
-            if parsed_data[0] == '$GPGGA':
+            if parsed_data[0] == '!DATA':
                 print('Received GPS: ', data)
                 #TODO: update GPS data
-                self.robot.lat = 0.0
-                self.robot.lon = 0.0
-                self.robot.heading = 0.0
-            elif parsed_data[0] == '$ADCP':
-                print('Received ADCP: ', data)
-                #TODO: update ADCP data
+                self.robot.lat = parsed_data[0]
+                self.robot.lon = parsed_data[1]
+                self.robot.heading = parsed_data[2]
+                self.depth = parsed_data[3]
+
         except KeyboardInterrupt:
             print("I'm here!")
             end_msg = "STOP".encode()

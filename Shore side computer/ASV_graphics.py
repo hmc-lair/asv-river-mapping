@@ -12,7 +12,7 @@ IMAGE_HEIGHT = 800
 MAP_FILE = '../Maps/river_section.tif'
 
 class ASV_graphics:
-    def __init__(self, environment):
+    def __init__(self, controller):
         # Load map for display/GPS conversions
         dataset = gdal.Open(MAP_FILE)
         data = dataset.ReadAsArray()
@@ -20,7 +20,7 @@ class ASV_graphics:
         self.inv_trans = gdal.InvGeoTransform(self.geo_trans)
 
         # Set up GUI
-        self.environment = environment
+        self.controller = controller
         self.tk = Tk()
         self.tk.title("ASV Control Interface")
 
@@ -107,9 +107,13 @@ class ASV_graphics:
     def on_stop(self):
         #TODO: Stop motors
         print('Motors stopped!')
+        command_msg = "!STOP"
+        self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
 
     def on_quit(self):
         print('QUIT!')
+        command_msg = "!QUIT"
+        self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
         self.on_stop()
 
     ###########################################################################
@@ -127,9 +131,9 @@ class ASV_graphics:
         return True
 
     def update_GPS(self):
-        lat = self.environment.robot.lat
-        lon = self.environment.robot.lon
-        heading = self.environment.robot.heading
+        lat = self.controller.robot.lat
+        lon = self.controller.robot.lon
+        heading = self.controller.robot.heading
 
         self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(heading) + '\n'
         x, y,_, _ = utm.from_latlon(lat, lon)
@@ -147,7 +151,11 @@ class ASV_graphics:
             self.canvas.move(self.cur_pos, dx, dy)
 
     def update_ADCP(self):
-        pass
+        depth = self.controller.depth
+        current = self.controller.v_boat
+
+        self.adcp_depth['text'] = 'Water depth: %f' % (depth)
+        self.adcp_current['text'] = "Current speed" % (current)
 
     ###########################################################################
     # ASV Commands
@@ -163,6 +171,9 @@ class ASV_graphics:
         self.control_waypoint['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon) + '\n'
 
         #TODO: Send command to ASV to move to x, y
+        way_point_msg = "!WP, %f, %f" % (x, y)
+        self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
+
         return
 
     #Display ASV path plan 
