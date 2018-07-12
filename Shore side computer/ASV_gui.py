@@ -22,6 +22,7 @@ def main():
             controller.local_xbee.del_data_received_callback(controller.data_received_callback)
             end_msg = "STOP".encode()
             controller.local_xbee.send_data_async(controller.boat_xbee,end_msg)
+            controller.local_xbee.close()
             break
 
     controller.quit()
