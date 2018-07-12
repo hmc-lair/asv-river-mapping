@@ -9,6 +9,9 @@ from digi.xbee.devices import XBeeDevice
 class ASV_Controller:
     
     def __init__(self):
+        # robot state
+        self.robot = ASV_state()
+
         # initialize xbee
         ser = serial.Serial("/dev/tty.usbserial-DN02Z6QY", 9600)
         ser.flush()
@@ -65,8 +68,13 @@ class ASV_Controller:
 
             if parsed_data[0] == '$GPGGA':
                 print('Received GPS: ', data)
+                #TODO: update GPS data
+                self.robot.lat = 0.0
+                self.robot.lon = 0.0
+                self.robot.heading = 0.0
             elif parsed_data[0] == '$ADCP':
                 print('Received ADCP: ', data)
+                #TODO: update ADCP data
         except KeyboardInterrupt:
             print("I'm here!")
             end_msg = "STOP".encode()
