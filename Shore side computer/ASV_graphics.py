@@ -18,7 +18,7 @@ MAP_FILE = '../Maps/cast.tif'
 MAP_WIDTH = 800
 MAP_HEIGHT = 600
 
-POINT_RADIUS = 10
+POINT_RADIUS = 5
 
 class ASV_graphics:
     def __init__(self, controller):
