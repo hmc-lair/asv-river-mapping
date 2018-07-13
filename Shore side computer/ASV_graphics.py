@@ -32,6 +32,7 @@ class ASV_graphics:
         self.robot_stopped = True
         self.quit_gui = False
         self.mission_mode = False
+        self.mission_waypoints = [] #format [(lat, lon)...]
 
         #######################################################################
         # GUI SECTION
@@ -64,18 +65,22 @@ class ASV_graphics:
         self.adcp_data = Label(self.sidebar_frame, anchor='w', width=30, text='Water depth: ???\nCurrent speed: ???\n')
         self.adcp_data.pack()
 
-        # Control Panel
+        # ASV Control Panel
         self.control_title = Label(self.sidebar_frame, anchor='w', text='ASV Control Panel').pack()
-        self.control_waypoint = Label(self.sidebar_frame, anchor='w', width=30, text='Target Waypoint:\nLatitude: ???\nLongitude: ???\n')
-        self.control_waypoint.pack()
-
-        # Buttons
-        self.mission = Button(self.sidebar_frame, anchor='w', text='Start mission', command=self.on_toggle_mission)
-        self.mission.pack()
-        self.goto = Button(self.sidebar_frame, anchor='w', text='Go to Map Location', command=self.on_toggle_goto)
-        self.goto.pack()
+        # 0) Start/stop ASV
         self.start_stop = Button(self.sidebar_frame, anchor='w', text='Start ASV', command=self.on_startstop)
         self.start_stop.pack()
+        # 1) Go to map location
+        self.control_wp = Label(self.sidebar_frame, anchor='w', width=30, text='Target Waypoint:\nLatitude: ???\nLongitude: ???\n')
+        self.control_wp.pack()
+        self.goto = Button(self.sidebar_frame, anchor='w', text='Go to Map Location', command=self.on_toggle_goto)
+        self.goto.pack()
+        # 2) Mission planning
+        self.mission_wps = Label(self.sidebar_frame, anchor='w', width=30, text='1. Latitude: ???\n   Longitude: ???\n')
+        self.mission_wps.pack()
+        self.mission_add_wps = Button(self.sidebar_frame, anchor='w', text='Add Waypoints', command=self.on_toggle_mission)
+        self.mission = Button(self.sidebar_frame, anchor='w', text='Start mission', command=self.on_toggle_mission)
+        self.mission.pack()
 
         # Load map image
         pilImg = Image.open(MAP_FILE)
@@ -107,7 +112,7 @@ class ASV_graphics:
 
     def on_get_waypoint_GPS(self, event):
         print('You are clicking on me!')
-        print()
+        print(self.target_GPS)
 
     # Function to be called when map location clicked
     def on_location_click(self, event):
@@ -221,7 +226,8 @@ class ASV_graphics:
         print('UTM: ', x, y)
         lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
         print('Lat/lon: ', lat, lon)
-        self.control_waypoint['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon) + '\n'
+        self.control_wp['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon) + '\n'
+        self.target_GPS = (lat, lon)
 
         #Send command to ASV to move to x, y
         way_point_msg = "!WP, %f, %f" % (x, y)
