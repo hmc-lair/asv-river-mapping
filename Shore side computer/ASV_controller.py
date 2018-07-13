@@ -75,12 +75,12 @@ class ASV_Controller:
             parsed_data = data.split(',')
 
             if parsed_data[0] == '!DATA':
-                print('Received GPS: ', data)
+                #print('Received GPS: ', data)
                 #TODO: update GPS data
-                self.robot.lat = parsed_data[0]
-                self.robot.lon = parsed_data[1]
-                self.robot.heading = parsed_data[2]
-                self.depth = parsed_data[3]
+                self.robot.lat = float(parsed_data[1])
+                self.robot.lon = float(parsed_data[2])
+                self.robot.heading = float(parsed_data[3])
+                self.depth = float(parsed_data[4])
 
         except KeyboardInterrupt:
             print("I'm here!")
