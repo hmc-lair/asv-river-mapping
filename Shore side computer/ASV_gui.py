@@ -7,15 +7,16 @@ def main():
     graphics = ASV_graphics(controller)
 
     # set time step size in seconds
-    deltaT = 0.1
+    #deltaT = 0.1
     # loop over time
     while True:
         try:
             # update graphics, but stop the thread if user stopped the gui
             if not graphics.update():
                 break
+
             # maintain timing
-            time.sleep(deltaT)
+            #time.sleep(deltaT)
 
         except (KeyboardInterrupt, SystemExit):
             print("Shutting sytem down...")
