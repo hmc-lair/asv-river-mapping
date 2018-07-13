@@ -8,7 +8,11 @@ import numpy as np
 import utm
 import gdal
 
-depths_file = 'depths.txt'
+
+BEAM_ANGLE = 20 #degrees
+
+heading_file = 'headings.txt'
+depths_file = 'depths_all.txt'
 timestamps_file = 'timestamps.txt'
 GPS_file = '../PI/Log/GPS_18-07-02 17.27.07.txt'
 
@@ -39,7 +43,7 @@ def load_map(filename):
 # GPS File Processing
 ###############################################################################
 
-# Returns UTM coordinates from GPS data
+# Returns pixel coordinates from GPS data
 def read_GPS_file(filename, inv_trans):
     all_data = []
     timestamps = []
@@ -53,7 +57,6 @@ def read_GPS_file(filename, inv_trans):
                 lon = -str_to_coord(lon_str) #W = negative, generalize later
                 x, y, _, _ = utm.from_latlon(lat, lon)
                 all_data.append((x, y))
-    
     ASV_X = []
     ASV_Y = []
     for x, y in all_data:
@@ -61,7 +64,7 @@ def read_GPS_file(filename, inv_trans):
         ASV_X.append(row)
         ASV_Y.append(col)
 
-    return ASV_X, ASV_Y, timestamps
+    return np.asarray(ASV_X), np.asarray(ASV_Y), timestamps
 
 def str_to_coord(coord_str):
     if len(coord_str) == 12:
@@ -75,19 +78,42 @@ def str_to_coord(coord_str):
 ###############################################################################
 
 def read_ADCP_file(filename, num_measurements):
+    all_depths = []
     with open(filename, 'r') as f:
-        depths = f.readline().split(',')[:-1]
-    with open(timestamps_file,'r') as f:
-        ADCP_timestamps = f.readline().split(',')[:-1]
-    ADCP_timestamps = [int(t) for t in ADCP_timestamps]
+        for line in f.readlines():
+            depths = line.split(',')[:-1]
+            depths = [float(d)*np.cos(BEAM_ANGLE*np.pi/180.) for d in depths]
+            all_depths.append(np.average(depths))
+    ratio = float(len(all_depths))/num_measurements
 
-    ratio = float(len(depths))/num_measurements
-
-    depths_down = np.zeros(num_measurements) #downsample
+    depths_down = []
     for i in range(num_measurements):
-        depths_down[i] = depths[int(i*ratio)]
+        depths_down.append(-all_depths[int(i*ratio)])
 
-    return -depths_down #depths are negative
+    return np.asarray(depths_down) #depths are negative
+
+###############################################################################
+# ADCP File Processing
+###############################################################################
+
+def read_heading_file(filename, num_measurements):
+    with open(filename, 'r') as f:
+        headings = f.readline().split(',')[:-1]
+    # Heading w.r.t. beam 3 (45 clockwise from N)
+    for i in range(len(headings)):
+        h_val = float(headings[i])
+        if h_val < 45:
+            headings[i] = (h_val-45) + 360
+        else:
+            headings[i] = h_val - 45
+
+    ratio = float(len(headings))/num_measurements
+
+    headings_down = []
+    for i in range(num_measurements):
+        headings_down.append(headings[int(i*ratio)])
+
+    return headings_down
 
 ###############################################################################
 
@@ -102,6 +128,9 @@ def main():
     #ADCP DATA
     Z = read_ADCP_file(depths_file, num_measurements) #Z = water depths
     min_depth = Z.min()
+
+    #HEADINGS
+    headings = read_heading_file(heading_file, num_measurements)
 
     #Normalize positions
     min_x = min(ASV_X)
@@ -141,31 +170,42 @@ def main():
                     Bvar[k][l] = Bvar[k][l]-cur_K*Bvar[k][l];
 
     # Method 1: Linear Interpolation
-    # xi, yi = np.mgrid[X.min():X.max():1000j, Y.min():Y.max():1000j]
+    xi, yi = np.mgrid[ASV_X.min():ASV_X.max():1000j, ASV_Y.min():ASV_Y.max():1000j]
 
-    # # Z is a matrix of x-y values
-    # points = []
-    # for i in range(len(X)):
-    #     points.append([X[i],Y[i]])
+    # Z is a matrix of x-y values
+    points = []
+    for i in range(len(ASV_X)):
+        points.append([ASV_X[i],ASV_Y[i]])
 
-    # zi = griddata(points, Z, (xi, yi), method='linear')
-    # for i in range(len(zi)):
-    #     for j in range(len(zi[0])):
-    #         if np.isnan(zi[i][j]):
-    #             zi[i][j] = min_depth
+    zi = griddata(points, Z, (xi, yi), method='linear')
+    for i in range(len(zi)):
+        for j in range(len(zi[0])):
+            if np.isnan(zi[i][j]):
+                zi[i][j] = min_depth
 
     ###########################################################################
     # PLOTS
     # 1) Map w/ ASV path
-    # imgplot = plt.imshow(img)
-    # plt.plot(ASV_X, ASV_Y, color='black')
-    # plt.contourf(xi, yi, zi, 10, cmap=plt.cm.rainbow)
+    imgplot = plt.imshow(img)
+    plt.plot(ASV_X, ASV_Y, color='black', zorder=2)
+    plt.contourf(xi, yi, zi, 10, cmap=plt.cm.rainbow, zorder=1)
 
     # 2) Depth surface map
-    X, Y = np.meshgrid(np.arange(n), np.arange(m))
-    ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    surf = ax1.plot_surface(X, Y, B, cmap=cm.viridis)
+    B_new = np.zeros((n,m))
+    for i in range(n):
+        for j in range(m):
+            B_new[i][j] = B[j][i]
 
+    X_plot, Y_plot = np.meshgrid(np.arange(m), np.arange(n))
+    ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
+    surf = ax1.plot_surface(X_plot, Y_plot, B_new, cmap=cm.viridis)
+
+    p = ax1.plot(X, Y, np.zeros(len(X)), color='red')
+    ax1.set_zlabel('Depth (m)')
+    ax1.invert_zaxis()
+    ax1.set_xlabel('Easting (m)')
+    ax1.set_ylabel('Northing (m)')
+    ax1.colorbar()
     plt.show()
 
 if __name__ == '__main__':
