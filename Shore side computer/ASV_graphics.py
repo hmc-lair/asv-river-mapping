@@ -28,26 +28,31 @@ class ASV_graphics:
         self.geo_trans = dataset.GetGeoTransform()
         self.inv_trans = gdal.InvGeoTransform(self.geo_trans)
 
+        # Control parameters
+        self.robot_stopped = True
+        self.quit_gui = False
+        self.mission_mode = False
+
+        #######################################################################
+        # GUI SECTION
+        #######################################################################
+
         # Set up GUI
         self.controller = controller
         self.tk = Tk()
         self.tk.title("ASV Control Interface")
-        self.robot_stopped = True
-        self.quit_gui = False
         self.tk.protocol("WM_DELETE_WINDOW", self.on_quit)
-        # lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
-        # print('Top left Lat/lon: ', lat, lon)
+
+        # GUI marker variables (labels on map)
+        self.cur_pos_marker = None
+        self.target_pos_marker = None
+        self.location_select_mode = False
 
         # Frames: Sidebar + Map Area
         self.sidebar_frame = Frame(self.tk, width=300, bg='white', height=500, relief='sunken', borderwidth=2)
         self.map_frame = Frame(self.tk)
         self.sidebar_frame.pack(expand=True, fill='both', side='left', anchor='nw')
         self.map_frame.pack(expand=True, fill='both', side='right')
-
-        # Position variables (labels on map)
-        self.cur_pos = None
-        self.target_pos = None
-        self.location_select_mode = False
 
         # GPS Coordinates
         self.gps_title = Label(self.sidebar_frame, anchor='w', text='ASV GPS Information').pack()
@@ -65,11 +70,12 @@ class ASV_graphics:
         self.control_waypoint.pack()
 
         # Buttons
+        self.mission = Button(self.sidebar_frame, anchor='w', text='Start mission', command=self.on_toggle_mission)
+        self.mission.pack()
         self.goto = Button(self.sidebar_frame, anchor='w', text='Go to Map Location', command=self.on_toggle_goto)
         self.goto.pack()
         self.start_stop = Button(self.sidebar_frame, anchor='w', text='Start ASV', command=self.on_startstop)
         self.start_stop.pack()
-        #self.quit = Button(self.sidebar_frame, anchor='w', text='QUIT GUI', command=self.on_quit).pack()
 
         # Load map image
         pilImg = Image.open(MAP_FILE)
@@ -82,19 +88,13 @@ class ASV_graphics:
         self.canvas.pack()
         self.canvas.bind("<Button 1>", self.on_location_click)
 
-        # origin point
-        self.origin_lat = 35.44073027
-        self.origin_lon = -118.9001349
-        self.origin_x, self.origin_y,_, _ = utm.from_latlon(self.origin_lat, self.origin_lon)
-        col, row = gdal.ApplyGeoTransform(self.inv_trans, self.origin_x, self.origin_y)
-        x1, y1 = (col - 5), (row - 5)
-        x2, y2 = (col + 5), (row + 5)
-        self.origin_dot = self.canvas.create_oval(x1, y1, x2, y2, fill='black')
-
-
     ###########################################################################
     # Callbacks
     ###########################################################################
+
+    def on_toggle_mission(self):
+        print('Start mission!')
+        pass
 
     def on_toggle_goto(self):
         if self.location_select_mode:
@@ -105,21 +105,26 @@ class ASV_graphics:
             self.goto.configure(text='Select Map Location...')
         print('Mode: ', self.location_select_mode)
 
+    def on_get_waypoint_GPS(self, event):
+        print('You are clicking on me!')
+        print()
+
     # Function to be called when map location clicked
     def on_location_click(self, event):
         if self.location_select_mode == False:
             return
         print(event.x, event.y)
 
-        if self.target_pos == None:
+        if self.target_pos_marker == None:
             x1, y1 = (event.x - POINT_RADIUS), (event.y - POINT_RADIUS)
             x2, y2 = (event.x + POINT_RADIUS), (event.y + POINT_RADIUS)
-            self.target_pos = self.canvas.create_oval(x1, y1, x2, y2, fill='red')
+            self.target_pos_marker = self.canvas.create_oval(x1, y1, x2, y2, fill='red', tags='target')
+            self.canvas.tag_bind('target', '<ButtonPress-1>', self.on_get_waypoint_GPS)
         else:
-            old_pos = self.canvas.coords(self.target_pos)
+            old_pos = self.canvas.coords(self.target_pos_marker)
             dx = event.x - (old_pos[0] + POINT_RADIUS)
             dy = event.y - (old_pos[1] + POINT_RADIUS)
-            self.canvas.move(self.target_pos, dx, dy)
+            self.canvas.move(self.target_pos_marker, dx, dy)
 
         self.go_to_location(event.x, event.y)
 
@@ -132,14 +137,14 @@ class ASV_graphics:
         if self.robot_stopped:
             print('Starting motors...')
             command_msg = "!START"
-            if self.controller.boat_xbee != None:
+            if self.controller.mode == 'HARDWARE MODE':
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
             self.start_stop['text'] = 'Stop ASV'
             self.robot_stopped = False
         else:
             print('Stopping motors!')
             command_msg = "!STOP"
-            if self.controller.boat_xbee != None:
+            if self.controller.mode == 'HARDWARE MODE':
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
             self.start_stop['text'] = 'Start ASV'
             self.robot_stopped = True
@@ -147,7 +152,7 @@ class ASV_graphics:
     def on_quit(self):
         print('QUIT!')
         command_msg = "!QUIT"
-        if self.controller.boat_xbee != None:
+        if self.controller.mode == 'HARDWARE MODE':
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
         self.on_startstop()
         self.tk.destroy()
@@ -160,7 +165,8 @@ class ASV_graphics:
     # Called at every iteration of main loop
     def update(self):
         self.update_GPS()
-        self.update_ADCP()
+        if self.controller.mode == 'HARDWARE MODE':
+            self.update_ADCP()
 
         # update the graphics
         self.tk.update()
@@ -181,22 +187,19 @@ class ASV_graphics:
         row = int(img_row*MAP_HEIGHT/IMAGE_HEIGHT)
 
         # Update ASV location on map
-        if self.cur_pos == None:
+        if self.cur_pos_marker == None:
             x1, y1 = (col - POINT_RADIUS), (row - POINT_RADIUS)
             x2, y2 = (col + POINT_RADIUS), (row + POINT_RADIUS)
-            self.cur_pos = self.canvas.create_oval(x1, y1, x2, y2, fill='green')
+            self.cur_pos_marker = self.canvas.create_oval(x1, y1, x2, y2, fill='green')
         else:
-            old_pos = self.canvas.coords(self.cur_pos)
+            old_pos = self.canvas.coords(self.cur_pos_marker)
             dx = col - (old_pos[0] + POINT_RADIUS)
             dy = row - (old_pos[1] + POINT_RADIUS)
-            self.canvas.move(self.cur_pos, dx, dy)
+            self.canvas.move(self.cur_pos_marker, dx, dy)
 
     def update_ADCP(self):
         depth = self.controller.depth
         current = self.controller.v_boat
-
-        # self.adcp_depth['text'] = 'Water depth: ' + str(depth)
-        # self.adcp_current['text'] = "Current speed: " + str(current) + '\n'
         self.adcp_data['text'] = 'Water depth: ' + str(depth) + "\nCurrent speed: " + str(current) + '\n'
 
     ###########################################################################
@@ -211,7 +214,8 @@ class ASV_graphics:
         # Send map origin to PI
         x, y = gdal.ApplyGeoTransform(self.geo_trans, 0, 0)
         command_msg = "!ORIGIN, %f, %f" % (x, y)
-        self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
+        if self.controller.mode == 'HARDWARE MODE':
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
 
         x, y = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
         print('UTM: ', x, y)

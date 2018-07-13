@@ -90,9 +90,10 @@ class ASV_Controller:
     def quit(self):
         print("Shutting sytem down...")
         end_msg = "STOP".encode()
-        self.local_xbee.send_data_async(self.boat_xbee,end_msg)
-        time.sleep(1)
-        self.local_xbee.close() 
+        if self.mode == 'HARDWARE MODE':
+            self.local_xbee.send_data_async(self.boat_xbee,end_msg)
+            time.sleep(1)
+            self.local_xbee.close() 
         exit(1)
 
     ################################################################################
