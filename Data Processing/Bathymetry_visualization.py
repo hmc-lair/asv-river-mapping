@@ -3,7 +3,6 @@ import matplotlib.image as mpimg
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 from scipy.interpolate import griddata
-
 import numpy as np
 import utm
 import gdal
@@ -14,7 +13,8 @@ BEAM_ANGLE = 20 #degrees
 heading_file = 'headings.txt'
 depths_file = 'depths_all.txt'
 timestamps_file = 'timestamps.txt'
-GPS_file = '../PI/Log/GPS_18-07-02 17.27.07.txt'
+GPS_file = '../PI/Log/GPS_18-07-02 17.17.09.txt' #lake
+#GPS_file = '../PI/Log/GPS_18-07-02 17.27.07.txt' #river
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
@@ -33,11 +33,12 @@ sigma_offset = 0.6142
 def load_map(filename):
     dataset = gdal.Open(filename)
     data = dataset.ReadAsArray()
+    _, height, width = data.shape
     geo_trans = dataset.GetGeoTransform()
     inv_trans = gdal.InvGeoTransform(geo_trans)
 
     img = mpimg.imread(filename)
-    return img, inv_trans
+    return img, inv_trans, geo_trans, width, height
 
 ###############################################################################
 # GPS File Processing
@@ -46,12 +47,10 @@ def load_map(filename):
 # Returns pixel coordinates from GPS data
 def read_GPS_file(filename, inv_trans):
     all_data = []
-    timestamps = []
     with open(filename, 'r') as f:
         for line in f.readlines():
             vals = line.split(',')
             if line[:6] == '$GPGGA' and len(vals) > 10:
-                timestamps.append(int(float(vals[1])))
                 lat_str,_,lon_str,_ = vals[2:6]
                 lat = str_to_coord(lat_str)
                 lon = -str_to_coord(lon_str) #W = negative, generalize later
@@ -64,7 +63,7 @@ def read_GPS_file(filename, inv_trans):
         ASV_X.append(row)
         ASV_Y.append(col)
 
-    return np.asarray(ASV_X), np.asarray(ASV_Y), timestamps
+    return np.asarray(ASV_X), np.asarray(ASV_Y)
 
 def str_to_coord(coord_str):
     if len(coord_str) == 12:
@@ -119,10 +118,10 @@ def read_heading_file(filename, num_measurements):
 
 #Read data from 1 trial
 def main():
-    img, inv_trans = load_map(map_file)
+    img, inv_trans, geo_trans, MAP_WIDTH, MAP_HEIGHT = load_map(map_file)
 
     #GPS DATA
-    ASV_X, ASV_Y, GPS_timestamps = read_GPS_file(GPS_file, inv_trans)
+    ASV_X, ASV_Y = read_GPS_file(GPS_file, inv_trans)
     num_measurements = len(ASV_X)
 
     #ADCP DATA
@@ -139,7 +138,6 @@ def main():
     Y = [v - min_y for v in ASV_Y]
     max_x = max(X)
     max_y = max(Y)
-    print('Max vals:', max_x, max_y)
 
     # Method 0: 1D Kalman Filter
     m = int(np.ceil(max_x/CELL_RES))
@@ -188,24 +186,42 @@ def main():
     # 1) Map w/ ASV path
     imgplot = plt.imshow(img)
     plt.plot(ASV_X, ASV_Y, color='black', zorder=2)
-    plt.contourf(xi, yi, zi, 10, cmap=plt.cm.rainbow, zorder=1)
+    plt.xlabel('Meters')
+    plt.ylabel('Meters')
+
+    x0, y0 = gdal.ApplyGeoTransform(geo_trans, 0, 0) #UTM of top left corner
+    x1, y1 = gdal.ApplyGeoTransform(geo_trans, 4000, 3000)
+    print('Offsets', x1-x0, y1-y0)
+
+    ax = plt.gca() # grab the current axis
+    ax.set_xticks(np.arange(0,MAP_WIDTH+500,500)) # choose which x locations to have ticks
+    xlabels = np.linspace(0, x1-x0, int(MAP_WIDTH/500.)+1)
+    xlabels = [int(p) for p in xlabels]
+    ax.set_xticklabels(xlabels) # set the labels to display at those ticks
+
+    ax.set_yticks(np.arange(0,MAP_HEIGHT,500)) # choose which x locations to have ticks
+    ylabels = np.linspace(0, y0-y1, int(MAP_HEIGHT/500.)+1)
+    ylabels = [int(p) for p in ylabels]
+    ax.set_yticklabels(ylabels) # set the labels to display at those ticks
+
+    #plt.contourf(xi, yi, zi, 10, cmap=plt.cm.rainbow, zorder=1)
 
     # 2) Depth surface map
-    B_new = np.zeros((n,m))
-    for i in range(n):
-        for j in range(m):
-            B_new[i][j] = B[j][i]
+    # B_new = np.zeros((n,m))
+    # for i in range(n):
+    #     for j in range(m):
+    #         B_new[i][j] = B[j][i]
 
-    X_plot, Y_plot = np.meshgrid(np.arange(m), np.arange(n))
-    ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    surf = ax1.plot_surface(X_plot, Y_plot, B_new, cmap=cm.viridis)
+    # X_plot, Y_plot = np.meshgrid(np.arange(m), np.arange(n))
+    # ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
+    # surf = ax1.plot_surface(X_plot, Y_plot, B_new, cmap=cm.viridis)
 
-    p = ax1.plot(X, Y, np.zeros(len(X)), color='red')
-    ax1.set_zlabel('Depth (m)')
-    ax1.invert_zaxis()
-    ax1.set_xlabel('Easting (m)')
-    ax1.set_ylabel('Northing (m)')
-    ax1.colorbar()
+    # p = ax1.plot(X, Y, np.zeros(len(X)), color='red')
+    # ax1.view_init(200, -50)
+    # ax1.set_zlabel('Depth (m)')
+    # ax1.invert_zaxis()
+    # ax1.set_xlabel('Easting (m)')
+    # ax1.set_ylabel('Northing (m)')
     plt.show()
 
 if __name__ == '__main__':
