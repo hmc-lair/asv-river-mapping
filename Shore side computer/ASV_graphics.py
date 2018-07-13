@@ -82,6 +82,16 @@ class ASV_graphics:
         self.canvas.pack()
         self.canvas.bind("<Button 1>", self.on_location_click)
 
+        # origin point
+        self.origin_lat = 35.44073027
+        self.origin_lon = -118.9001349
+        self.origin_x, self.origin_y,_, _ = utm.from_latlon(self.origin_lat, self.origin_lon)
+        col, row = gdal.ApplyGeoTransform(self.inv_trans, self.origin_x, self.origin_y)
+        x1, y1 = (col - 5), (row - 5)
+        x2, y2 = (col + 5), (row + 5)
+        self.origin_dot = self.canvas.create_oval(x1, y1, x2, y2, fill='black')
+
+
     ###########################################################################
     # Callbacks
     ###########################################################################
@@ -157,6 +167,7 @@ class ASV_graphics:
 
         return self.quit_gui == False
 
+
     def update_GPS(self):
         lat = self.controller.robot.lat
         lon = self.controller.robot.lon
@@ -210,7 +221,7 @@ class ASV_graphics:
 
         #Send command to ASV to move to x, y
         way_point_msg = "!WP, %f, %f" % (x, y)
-        self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
+        # self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
 
     #Display ASV path plan 
     # positions: (row,col)

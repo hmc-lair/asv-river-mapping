@@ -16,26 +16,30 @@ class ASV_Controller:
         self.depth = 0.0
         self.v_boat = 0.0
 
-        # initialize xbee
-        ser = serial.Serial("/dev/tty.usbserial-DN02Z6QY", 9600)
-        ser.flush()
-        ser.close()
-        self.local_xbee = XBeeDevice("/dev/tty.usbserial-DN02Z6QY", 9600)
-        self.local_xbee.open()
-        self.boat_xbee = None # no ASV xbee yet
+        self.mode = "SIM MODE"
 
-        # Setting up Xbee communication
-        self.local_xbee.add_data_received_callback(self.data_received_callback)
-        self.discover_boat(self.local_xbee)
-        if self.boat_xbee == None:
-            print('device not found!')
-            return
-        else:
-            print('device found! Sending start messages')
+        if self.mode == "HARDWARE MODE":
+            # initialize xbee
+            ser = serial.Serial("/dev/tty.usbserial-DN02Z6QY", 9600)
+            ser.flush()
+            ser.close()
+            self.local_xbee = XBeeDevice("/dev/tty.usbserial-DN02Z6QY", 9600)
+            self.local_xbee.open()
+            self.boat_xbee = None # no ASV xbee yet
 
-        # Sending start command to the boat
-        start_msg = "START".encode()
-        self.local_xbee.send_data_async(self.boat_xbee, start_msg)
+            # Setting up Xbee communication
+            self.local_xbee.add_data_received_callback(self.data_received_callback)
+            self.discover_boat(self.local_xbee)
+            
+            if self.boat_xbee == None:
+                print('device not found!')
+                return
+            else:
+                print('device found! Sending start messages')
+
+            # Sending start command to the boat
+            start_msg = "START".encode()
+            self.local_xbee.send_data_async(self.boat_xbee, start_msg)
 
     ###############################################################################
     # XBEE Setup Functions
