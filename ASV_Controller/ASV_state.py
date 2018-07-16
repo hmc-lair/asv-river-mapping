@@ -12,6 +12,8 @@ class ASV_state:
 		self.a = 0.0
 		self.theta = theta
 		self.omega = 0.0
+		self.angle_acc = 0.0
+
 		self.lat = 0.0
 		self.lon = 0.0
 
