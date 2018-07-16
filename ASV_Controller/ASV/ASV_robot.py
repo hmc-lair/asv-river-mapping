@@ -217,7 +217,7 @@ class ASV_robot:
     def xbee_callback(self, xbee_message):
         data = xbee_message.data.decode()
         parsed_data = data.split(',')
-        print(data)
+        # print(data)
         if parsed_data[0] == "!QUIT":
             self.terminate = True
             print("Stop message received. Terminating...")
@@ -549,7 +549,7 @@ class ASV_sim(ASV_robot):
 
     def sim_loop(self):
         uL, uR = self.point_track(self.cur_des_point)
-        print("uL, uR", uL, uR)
+        # print("uL, uR", uL, uR)
         self.update_state(self.state_est, uL, uR)
         # print("Destination:", self.cur_des_point.x, self.cur_des_point.y)
 
@@ -574,7 +574,7 @@ class ASV_sim(ASV_robot):
 
         state.v = state.v + state.a * self.dt
         state.omega = state.omega + state.ang_acc * self.dt
-        print(state.omega)
+        # print(state.omega)
         state.omega = min(max(state.omega, -1), 1)
 
         # update position

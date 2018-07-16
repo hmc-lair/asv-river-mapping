@@ -345,35 +345,21 @@ class ASV_graphics:
         img_col = int(col*IMAGE_WIDTH/MAP_WIDTH)
         img_row = int(row*IMAGE_HEIGHT/MAP_HEIGHT)
 
-        # Send map origin to PI
-        self.set_origin(0,0)
-        command_msg = "!ORIGIN, %f, %f" % (self.origin_x_utm, self.origin_y_utm)
-
-        x_des_utm, y_des_utm = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
-        x_des_local = x_des_utm - self.origin_x_utm # convert to local coordinate
-        y_des_local = y_des_utm - self.origin_y_utm
-
-        print('UTM: ', x_des_utm, y_des_utm)
-        lat, lon = utm.to_latlon(x_des_utm, y_des_utm, 11, 'S') #11, S is UTM zone for Kern River
-        print('Lat/lon: ', lat, lon)
-        print('Local: ', x_des_local, y_des_local)
+        x, y = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
+        lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
         
         self.control_wp['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon) + '\n'
         self.target_GPS = (lat, lon)
 
         #Send command to ASV to move to x, y
-        way_point_msg = "!WP, %f, %f" % (x_des_local, y_des_local)
+        way_point_msg = "!WP, %f, %f" % (x, y)
 
         # Sending data over
         if self.controller.mode == 'HARDWARE MODE':
-            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
         else:
             way_pt_msg = XBeeModel.message.XBeeMessage(way_point_msg.encode(), None, None)
-            origin_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
-
             self.controller.robot.xbee_callback(way_pt_msg)
-            self.controller.robot.xbee_callback(origin_msg)
 
     '''
     Return points to draw arrow at x, y. Points at theta (radians)
