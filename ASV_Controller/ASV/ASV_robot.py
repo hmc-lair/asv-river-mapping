@@ -45,8 +45,8 @@ class ASV_robot:
         # Origin
         self.origin_lat = 0.0
         self.origin_long = 0.0
-        self.origin_x = 0.0
-        self.origin_y = 0.0
+        self.origin_x_utm = 0.0
+        self.origin_y_utm = 0.0
 
         self.beam_angle = 20
 
@@ -193,9 +193,10 @@ class ASV_robot:
     def localize_with_GPS(self):
         '''state estimate with GPS'''
         # 1. Update position with GPS
-        self.state_est.x = self.utm_x - self.origin_x
-        self.state_est.y = self.utm_y - self.origin_y
+        # self.state_est.x = self.utm_x - self.origin_x
+        # self.state_est.y = self.utm_y - self.origin_y
         self.GPS_received = False
+
 
     def predict(self):
         '''Predict with just the internal states of the robot'''
@@ -225,12 +226,12 @@ class ASV_robot:
             self.terminate = True
             print("Stop message received. Terminating...")
         elif parsed_data[0] == "!WP":
-            self.cur_des_point.x = float(parsed_data[1]) - self.origin_x
-            self.cur_des_point.y = float(parsed_data[2]) - self.origin_y
+            self.cur_des_point.x = float(parsed_data[1]) # way point in local x, y
+            self.cur_des_point.y = float(parsed_data[2]) 
             self.add_way_points(self.cur_des_point)
         elif parsed_data[0] == "!ORIGIN":
-            self.origin_x = float(parsed_data[1])
-            self.origin_y = float(parsed_data[2])
+            self.origin_x_utm = float(parsed_data[1])
+            self.origin_y_utm = float(parsed_data[2])
             # self.origin_x, self.origin_y, _, _ = utm.from_latlon(self.str_to_coord(self.origin_lat), self.str_to_coord(self.origin_long))
         elif parsed_data[0] == "!MISSION":
             self.way_points = []
@@ -251,7 +252,7 @@ class ASV_robot:
         '''Send information back to shore'''
         if self.terminate == False:
             average_depth = sum(self.depths)/len(self.depths)
-            msg = "!DATA, %f, %f, %f, %f, %f, %f" % (self.state_est.lat, self.state_est.lon, self.heading, average_depth, self.v_boat[0], self.v_boat[1])
+            msg = "!DATA, %f, %f, %f, %f, %f, %f" % (self.state_est.x, self.state_est.y, self.heading, average_depth, self.v_boat[0], self.v_boat[1])
             # print(msg)
             msg_binary = msg.encode()
             self.environment.my_xbee.send_data_async(self.environment.dest_xbee, msg_binary)
@@ -274,6 +275,7 @@ class ASV_robot:
         self.environment.GPS_ser.close()
 
     def process_GPS(self, data):
+        ''' Convert GPS (lat, lon) -> UTM -> Local XY '''
         data_decoded = data.decode()
         # data_decoded = '$GPGGA,194502.00,3526.9108198,N,11854.8502196,W,2,15,0.8,142.610,M,-29.620,M,7.0,0131*78'
         raw_msg = data_decoded.split(',')
@@ -284,7 +286,9 @@ class ASV_robot:
                 self.GPS_Time = raw_msg[1]
                 self.state_est.lat = self.str_to_coord(raw_msg[2])
                 self.state_est.lon = -self.str_to_coord(raw_msg[4])
-                self.utm_x, self.utm_y, _, _ = utm.from_latlon(self.state_est.lat, self.state_est.lon)
+                self.utm_x, self.utm_y, _, _ = utm.from_latlon(self.state_est.lat, self.state_est.lon)       
+                self.state_est.x = self.utm_x - self.origin_x_utm
+                self.state_est.y = self.utm_y - self.origin_y_utm
                 self.GPS_received = True
             else:
                 self.GPS_received = False
@@ -567,25 +571,28 @@ class ASV_sim(ASV_robot):
 
         return delta_s, delta_theta
 
-    def simulate_odometry(self, left_dist, right_dist):
-        delta_s = 0
-        delta_theta = 0
+    def update_state(self, state, uL, uR):
+        ''' for simulation '''
+        b_l = 1 # sim linear drag
+        b_r = 2 # sim rotational drag 
+        I_zz = 60 # sim moment of inertia 
+        m = 50 # sim mass
+        robot_radius = 0.5
 
-        # Calculate v x dt and w x dt
-        delta_s = 0.5 * (left_dist + right_dist);
-        delta_theta = 0.5 / self.radius * (left_dist - right_dist)
-            
-        # keep this to return appropriate changes in distance, angle
-        return delta_s, delta_theta
+       # update state
+        state.a = (uL + uR)/m + b_l/m * state.v
+        state.ang_acc = b_l / I_zz * state.omega + 1/I_zz * 2 * robot_radius * (uR - uL)
 
-    def update_state(self, state, delta_s, delta_theta):
-          # ****************** Additional Student Code: Start ************
-        state.x = state.x + delta_s*math.cos(state.theta+delta_theta/2)
-        state.y = state.y + delta_s*math.sin(state.theta+delta_theta/2)
-        state.theta = state.theta + delta_theta
-            
-        # ****************** Additional Student Code: End ************
-            
+        state.v = state.v + state.a * self.dt
+        state.omega = state.omega + state.ang_acc * self.dt
+
+        # update position
+        state.x = state.x + state.v*math.cos(state.theta) * self.dt
+        state.y = state.y + state.v*math.sin(state.theta) * self.dt
+        state.theta = self.angleDiff(state.theta + state.omega * self.dt)
+        # print(state.y)
+        # self.state_est.lat, self.state_est.lon = utm.to_latlon(self.utm_x, self.utm_y, 11, 'S')
+
         # keep this to return the updated state
         return state
 

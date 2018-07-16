@@ -5,6 +5,7 @@ from xbee import XBee
 from digi.xbee.devices import XBeeDevice
 import ASV.ASV_robot as ASV_robot
 import ASV.ASV_environment as ASV_environment
+import utm
 
 ### This module controls the communication between Central and ASV,
 ### path planning (?), and data logging
@@ -46,10 +47,13 @@ class ASV_Controller:
         
         elif self.mode ==  "SIM MODE":
             self.sim_env = ASV_environment.ASV_sim_env()
-            self.ASV_sim = ASV_robot.ASV_sim(self.sim_env)
+            self.robot = ASV_robot.ASV_sim(self.sim_env)
+            
             # Specify the origin
-            self.ASV_sim.state_est.lat = 34.13643662222965 
-            self.ASV_sim.state_est.lon = -118.12571806989683
+            self.robot.state_est.lat = 34.13643662222965 
+            self.robot.state_est.lon = -118.12571806989683
+
+            self.robot.utm_x, self.robot.utm_y, _, _ = utm.from_latlon(self.robot.state_est.lat, self.robot.state_est.lon)
 
     ###############################################################################
     # XBEE Setup Functions
@@ -87,9 +91,9 @@ class ASV_Controller:
             if parsed_data[0] == '!DATA':
                 #print('Received GPS: ', data)
                 #TODO: update GPS data
-                self.robot_state.lat = float(parsed_data[1])
-                self.robot_state.lon = float(parsed_data[2])
-                self.robot_state.theta = float(parsed_data[3])
+                self.robot.state_est.x = float(parsed_data[1])
+                self.robot.state_est.y = float(parsed_data[2])
+                self.robot.state_est.theta = float(parsed_data[3])
                 self.depth = float(parsed_data[4])
 
 

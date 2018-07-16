@@ -3,6 +3,7 @@ from PIL import Image, ImageTk
 import gdal
 import utm
 import time
+import digi.xbee.models as XBeeModel
 
 #Milikan pond is 170x110
 #Cast is 
@@ -108,6 +109,10 @@ class ASV_graphics:
         self.canvas.create_image(0,0, image=self.img, anchor=NW)
         self.canvas.pack()
         self.canvas.bind("<Button 1>", self.on_location_click)
+
+        # origin
+        self.origin_x_utm = 0
+        self.origin_y_utm = 0
 
     ###########################################################################
     # Location Conversions
@@ -264,8 +269,11 @@ class ASV_graphics:
     # Called at every iteration of main loop
     def update(self):
         self.update_GPS()
-        if self.controller.mode == 'HARDWARE MODE':
-            self.update_ADCP()
+        self.update_ADCP()
+
+        # Simulation Mode
+        if self.controller.mode == "SIM MODE":
+            self.controller.robot.update_state(self.controller.robot.state_est, 10, 10)
 
         # update the graphics
         self.tk.update()
@@ -274,13 +282,21 @@ class ASV_graphics:
 
 
     def update_GPS(self):
-        lat = self.controller.robot_state.lat
-        lon = self.controller.robot_state.lon
-        heading = self.controller.robot_state.theta
+        '''Get local x, y coordinate from robot. Then convert to utm for graphing'''
+        x_local = self.controller.robot.state_est.x
+        y_local = self.controller.robot.state_est.y
+        heading = self.controller.robot.state_est.theta
 
+        # Convert local x y to lat lon
+        lat, lon = utm.to_latlon(x_local + self.origin_x_utm, y_local + self.origin_y_utm)
         self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(heading) + '\n'
-        x, y,_, _ = utm.from_latlon(lat, lon)
-        img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x, y)
+        
+        # Convert local x y to utm
+        x_utm = self.origin_x_utm + x_local
+        y_utm = self.origin_y_utm + y_local
+
+        # Convert UTM to graphing row and column
+        img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x_utm, y_utm)
 
         col = int(img_col*MAP_WIDTH/IMAGE_WIDTH)
         row = int(img_row*MAP_HEIGHT/IMAGE_HEIGHT)
@@ -304,6 +320,11 @@ class ASV_graphics:
     ###########################################################################
     # ASV Commands
     ###########################################################################
+    def set_origin(self, row, col):
+        # Send map origin to PI
+        x, y = gdal.ApplyGeoTransform(self.geo_trans, row, col)
+        self.origin_x_utm = x
+        self.origin_y_utm = y
 
     #Go to location specified by mouse click (pixel coords -> GPS)
     def go_to_location(self, col, row):
@@ -311,23 +332,34 @@ class ASV_graphics:
         img_row = int(row*IMAGE_HEIGHT/MAP_HEIGHT)
 
         # Send map origin to PI
-        x, y = gdal.ApplyGeoTransform(self.geo_trans, 0, 0)
-        command_msg = "!ORIGIN,%f,%f" % (x, y)
-        if self.controller.mode == 'HARDWARE MODE':
-            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
+        self.set_origin(0,0)
+        command_msg = "!ORIGIN, %f, %f" % (self.origin_x_utm, self.origin_y_utm)
 
-        x, y = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
-        print('UTM: ', x, y)
+        x_des_utm, y_des_utm = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
+        x_des_local = x_des_utm - self.origin_x_utm # convert to local coordinate
+        y_des_local = x_des_utm - self.origin_y_utm
+
+        print('UTM: ', x_des_utm, y_des_utm)
         lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
         print('Lat/lon: ', lat, lon)
+        print('Local: ', x_des_local, y_des_local)
+        
         self.control_wp['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon) + '\n'
         self.target_GPS = (lat, lon)
 
         #Send command to ASV to move to x, y
-        way_point_msg = "!WP,%f,%f" % (x, y)
-        if self.controller.mode == 'HARDWARE MODE':
-            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
+        way_point_msg = "!WP, %f, %f" % (x_des_utm, y_des_utm)
 
+        # Sending data over
+        if self.controller.mode == 'HARDWARE MODE':
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
+        else:
+            way_pt_msg = XBeeModel.message.XBeeMessage(way_point_msg.encode(), None, None)
+            origin_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
+
+            self.controller.robot.xbee_callback(way_pt_msg)
+            self.controller.robot.xbee_callback(origin_msg)
 
 if __name__ == '__main__':
     my_gui = ASV_graphics(None)
