@@ -52,7 +52,7 @@ class ASV_Controller:
             # Specify robot location
             self.robot.state_est.x = 50
             self.robot.state_est.y = -50
-            self.robot.state_est.theta = math.pi/4
+            self.robot.state_est.theta = 0
 
     ###############################################################################
     # XBEE Setup Functions

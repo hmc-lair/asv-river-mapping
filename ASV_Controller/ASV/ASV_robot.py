@@ -21,13 +21,16 @@ class ASV_robot:
         self.cur_des_point.set_state(1,1,1)
         self.way_points = [self.cur_des_point]
         self.des_reached = True
-        self.dist_threshold = 5
+        self.dist_threshold = 1
         self.dt = 0.01
 
         self.motor_stop = False
 
         # Controller Params
-        self.Kp = 0.1
+        self.Kp = 1
+        self.Kd = 5
+        self.Ki = 0.5
+        self.last_ang_error = 0.0
 
         # robot commands
         self.rudder = 0.0
@@ -155,6 +158,7 @@ class ASV_robot:
             else:
                 self.way_points = self.way_points[1:]
                 self.cur_des_point = self.way_points[0]
+                self.des_reached = False
 
     def add_way_points(self, way_points):
         '''add way points'''
@@ -174,15 +178,18 @@ class ASV_robot:
             u_starboard = 0.0
             u_port = 0.0
         else:
-            # Simple heading P control
-            heading_diff = self.angleDiff(angle_offset- self.state_est.theta)
-            uR = -self.Kp * (heading_diff)
-            uL = self.Kp * heading_diff
-
-            # Simple velocity P control
+            # Simple heading PD control
+            ang_error = self.angleDiff(angle_offset- self.state_est.theta)
+            uR = -self.Kp * ang_error - (ang_error - self.last_ang_error)/self.dt * self.Kd - (ang_error - self.last_ang_error)*self.dt*self.Ki
+            uL = self.Kp * ang_error + (ang_error - self.last_ang_error)/self.dt * self.Kd + (ang_error - self.last_ang_error)*self.dt*self.Ki
+            self.last_ang_error = ang_error
+            
             u_nom = 1
+            if (abs(ang_error) >= 0.2):
+                u_nom = 0
+            
             # cap the distance
-            u_nom = min(max(u_nom, 0), 10)
+            u_nom = min(max(u_nom, 0), 1)
 
             u_starboard = u_nom + uR
             u_port = u_nom + uL
@@ -239,10 +246,12 @@ class ASV_robot:
             # self.origin_x, self.origin_y, _, _ = utm.from_latlon(self.str_to_coord(self.origin_lat), self.str_to_coord(self.origin_long))
         elif parsed_data[0] == "!MISSION":
             self.way_points = []
-            for p in parsed_data[1].split(";"):
+            for p in parsed_data[1].split(";")[:-1]:
                 x, y = list(map(float, p.split(" ")))
                 des_point = ASV_state(x, y)
                 self.way_points.append(des_point)
+            self.cur_des_point = self.way_points[0]
+            self.des_reached = False
         elif parsed_data[0] == "!ABORTMISSION":
             self.way_points = []
             self.motor_stop  = True
@@ -560,9 +569,9 @@ class ASV_sim(ASV_robot):
 
     def sim_loop(self):
         uL, uR = self.point_track(self.cur_des_point)
-        print("uL, uR", uL, uR)
-        self.update_state(self.state_est, 1, 1)
-        # print("Destination:", self.cur_des_point.x, self.cur_des_point.y)
+        # print("uL, uR", uL, uR)
+        self.update_state(self.state_est, uL, uR)
+       # print("Destination:", self.cur_des_point.x, self.cur_des_point.y)
 
         self.update_waypoint()
 
@@ -573,8 +582,8 @@ class ASV_sim(ASV_robot):
         ''' for simulation '''
         # uL = 0
         # uR = 0
-        b_l = 2 # sim linear drag
-        b_r = 2 # sim rotational drag 
+        b_l = 1 # sim linear drag
+        b_r = 1 # sim rotational drag 
         I_zz = 60 # sim moment of inertia 
         m = 50 # sim mass
         robot_radius = 0.5
@@ -585,13 +594,14 @@ class ASV_sim(ASV_robot):
 
         state.v = state.v + state.a * self.dt
         state.omega = state.omega + state.ang_acc * self.dt
-        print(state.omega)
+        # print(state.omega)
         state.omega = min(max(state.omega, -1), 1)
 
         # update position
         state.x = state.x + state.v*math.cos(self.angleDiff(state.theta)) * self.dt
         state.y = state.y + state.v*math.sin(self.angleDiff(state.theta)) * self.dt
         state.theta = self.angleDiff(state.theta + state.omega * self.dt)
+        # print("x, y:", state.x, state.y)
         # print(state.y)
         # self.state_est.lat, self.state_est.lon = utm.to_latlon(self.utm_x, self.utm_y, 11, 'S')
 

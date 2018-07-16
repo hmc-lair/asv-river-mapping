@@ -151,7 +151,7 @@ class ASV_graphics:
             #Send mission waypoints to ASV and start mission
             mission_msg = "!MISSION," 
             for x, y in self.mission_wps:
-                mission_msg += "%f %f;" % (x, y)
+                mission_msg += "%f %f;" % (x-self.origin_x_utm, y-self.origin_y_utm)
 
             #TODO: ADD COUNTDOWN BEFORE SENDING COMMANDS
             print('Starting countdown...')
@@ -160,6 +160,9 @@ class ASV_graphics:
                 time.sleep(1)
             if self.controller.mode == 'HARDWARE MODE':
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, mission_msg.encode())
+            else:
+                xbee_msg = XBeeModel.message.XBeeMessage(mission_msg.encode(), None, None)
+                self.controller.robot.xbee_callback(xbee_msg)
             print('Mission started!')
 
     def on_toggle_add_wps(self):
@@ -304,7 +307,7 @@ class ASV_graphics:
         col = int(img_col*MAP_WIDTH/IMAGE_WIDTH)
 
         # Update ASV location on map
-        self.draw_arrow(row, col, heading)
+        self.draw_arrow(col, row, heading)
 
     def update_ADCP(self):
         depth = self.controller.depth
