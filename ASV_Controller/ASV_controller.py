@@ -49,11 +49,9 @@ class ASV_Controller:
             self.sim_env = ASV_environment.ASV_sim_env()
             self.robot = ASV_robot.ASV_sim(self.sim_env)
             
-            # Specify the origin
-            self.robot.state_est.lat = 34.13643662222965 
-            self.robot.state_est.lon = -118.12571806989683
-
-            self.robot.utm_x, self.robot.utm_y, _, _ = utm.from_latlon(self.robot.state_est.lat, self.robot.state_est.lon)
+            # Specify robot location
+            self.robot.x = 0
+            self.robot.y = 0
 
     ###############################################################################
     # XBEE Setup Functions
