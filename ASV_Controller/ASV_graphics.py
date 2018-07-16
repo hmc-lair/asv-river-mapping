@@ -350,7 +350,7 @@ class ASV_graphics:
         self.target_GPS = (lat, lon)
 
         #Send command to ASV to move to x, y
-        way_point_msg = "!WP, %f, %f" % (x_des_utm, y_des_utm)
+        way_point_msg = "!WP, %f, %f" % (x_des_local, y_des_local)
 
         # Sending data over
         if self.controller.mode == 'HARDWARE MODE':
@@ -362,6 +362,20 @@ class ASV_graphics:
 
             self.controller.robot.xbee_callback(way_pt_msg)
             self.controller.robot.xbee_callback(origin_msg)
+
+    '''
+    Return points to draw arrow at row, col
+    '''
+    def draw_arrow(self, row, col):
+        dx = 5
+        dy = 5
+        p1 = (row, col + dx)
+        p2 = (row - dy, col - 3*dx)
+        p3 = (row, col - dx)
+        p4 = (row + dy, col - 3*dx)
+        return p1, p2, p3, p4
+        
+
 
 if __name__ == '__main__':
     my_gui = ASV_graphics(None)
