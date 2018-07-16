@@ -550,7 +550,7 @@ class ASV_sim(ASV_robot):
     def sim_loop(self):
         uL, uR = self.point_track(self.cur_des_point)
         print("uL, uR", uL, uR)
-        self.update_state(self.state_est, 1, 1)
+        self.update_state(self.state_est, uL, uR)
         # print("Destination:", self.cur_des_point.x, self.cur_des_point.y)
 
         self.update_waypoint()

@@ -49,7 +49,7 @@ class ASV_Controller:
             self.sim_env = ASV_environment.ASV_sim_env()
             self.robot = ASV_robot.ASV_sim(self.sim_env)
             
-            # Specify robot location
+            # Specify robot location (50,50) in pixel coordinates
             self.robot.state_est.x = 396168.0
             self.robot.state_est.y = 3777912.0
             self.robot.state_est.theta = math.pi/4
