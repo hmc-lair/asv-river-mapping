@@ -20,14 +20,14 @@ class ASV_robot:
         self.cur_des_point = ASV_state()
         self.cur_des_point.set_state(1,1,1)
         self.way_points = [self.cur_des_point]
-        self.des_reached = False
-        self.dist_threshold = 0.5 
+        self.des_reached = True
+        self.dist_threshold = 5
         self.dt = 0.01
 
         self.motor_stop = False
 
         # Controller Params
-        self.Kp = 1.0
+        self.Kp = 0.1
 
         # robot commands
         self.rudder = 0.0
@@ -169,18 +169,21 @@ class ASV_robot:
         distance = math.sqrt((des_point.y - self.state_est.y)**2 + 
                 (des_point.x - self.state_est.x)**2)
 
-        if distance <= self.dist_threshold:
+        if distance <= self.dist_threshold or self.des_reached:
             self.des_reached = True
-            starboard = 0.0
-            port = 0.0
+            u_starboard = 0.0
+            u_port = 0.0
         else:
             # Simple heading P control
-            heading_diff = self.angleDiff(self.state_est.theta - angle_offset)
+            heading_diff = self.angleDiff(angle_offset- self.state_est.theta)
             uR = -self.Kp * (heading_diff)
             uL = self.Kp * heading_diff
 
             # Simple velocity P control
-            u_nom = (starboard/abs(starboard)) * distance * self.Kp
+            u_nom = 10
+            # cap the distance
+            u_nom = min(max(u_nom, 0), 10)
+
             u_starboard = u_nom + uR
             u_port = u_nom + uL
 
@@ -229,6 +232,7 @@ class ASV_robot:
             self.cur_des_point.x = float(parsed_data[1]) # way point in local x, y
             self.cur_des_point.y = float(parsed_data[2]) 
             self.add_way_points(self.cur_des_point)
+            self.des_reached = False
         elif parsed_data[0] == "!ORIGIN":
             self.origin_x_utm = float(parsed_data[1])
             self.origin_y_utm = float(parsed_data[2])
@@ -555,26 +559,22 @@ class ASV_sim(ASV_robot):
         self.dt = 0.1
 
     def sim_loop(self):
-        pass
+        uL, uR = self.point_track(self.cur_des_point)
+        print("uL, uR", uL, uR)
+        self.update_state(self.state_est, uL, uR)
+        # print("Destination:", self.cur_des_point.x, self.cur_des_point.y)
+
+        self.update_waypoint()
 
     def update_motor(self):
         pass
 
-    def simulate_movement(self, R, L):
-        '''Very simple function to simulate robot movement. Reutnr change in distance
-        and orientation'''
-        self.state_est.a = (R + L) / 10
-        self.state_est.v = self.state_est.v + self.state_est.a * self.dt
-        self.omega = self.state_est.v * math.cos(self.state_est.theta)
-
-        delta_s, delta_theta = self.simulate_odometry(left_dist, right_dist)
-
-        return delta_s, delta_theta
-
     def update_state(self, state, uL, uR):
         ''' for simulation '''
-        b_l = 1 # sim linear drag
-        b_r = 5 # sim rotational drag 
+        # uL = 0
+        # uR = 0
+        b_l = 2 # sim linear drag
+        b_r = 2 # sim rotational drag 
         I_zz = 60 # sim moment of inertia 
         m = 50 # sim mass
         robot_radius = 0.5
@@ -585,10 +585,12 @@ class ASV_sim(ASV_robot):
 
         state.v = state.v + state.a * self.dt
         state.omega = state.omega + state.ang_acc * self.dt
+        print(state.omega)
+        state.omega = min(max(state.omega, -1), 1)
 
         # update position
-        state.x = state.x + state.v*math.cos(self.angleDiff(-state.theta + math.pi/2)) * self.dt
-        state.y = state.y + state.v*math.sin(self.angleDiff(-state.theta + math.pi/2)) * self.dt
+        state.x = state.x + state.v*math.cos(self.angleDiff(state.theta)) * self.dt
+        state.y = state.y + state.v*math.sin(self.angleDiff(state.theta)) * self.dt
         state.theta = self.angleDiff(state.theta + state.omega * self.dt)
         # print(state.y)
         # self.state_est.lat, self.state_est.lon = utm.to_latlon(self.utm_x, self.utm_y, 11, 'S')

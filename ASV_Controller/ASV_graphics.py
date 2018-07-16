@@ -274,8 +274,7 @@ class ASV_graphics:
 
         # Simulation Mode
         if self.controller.mode == "SIM MODE":
-            self.controller.robot.update_state(self.controller.robot.state_est, 0, 0)
-            print(self.controller.robot.cur_des_point.x)
+            self.controller.robot.sim_loop()
 
         # update the graphics
         self.tk.update()
@@ -339,7 +338,7 @@ class ASV_graphics:
 
         x_des_utm, y_des_utm = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
         x_des_local = x_des_utm - self.origin_x_utm # convert to local coordinate
-        y_des_local = x_des_utm - self.origin_y_utm
+        y_des_local = y_des_utm - self.origin_y_utm
 
         print('UTM: ', x_des_utm, y_des_utm)
         lat, lon = utm.to_latlon(x_des_utm, y_des_utm, 11, 'S') #11, S is UTM zone for Kern River
