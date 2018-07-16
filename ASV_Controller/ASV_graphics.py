@@ -4,6 +4,7 @@ import gdal
 import utm
 import time
 import digi.xbee.models as XBeeModel
+import numpy as np
 
 #Milikan pond is 170x110
 #Cast is 
@@ -299,19 +300,11 @@ class ASV_graphics:
         # Convert UTM to graphing row and column
         img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x_utm, y_utm)
 
-        col = int(img_col*MAP_WIDTH/IMAGE_WIDTH)
         row = int(img_row*MAP_HEIGHT/IMAGE_HEIGHT)
+        col = int(img_col*MAP_WIDTH/IMAGE_WIDTH)
 
         # Update ASV location on map
-        if self.cur_pos_marker == None:
-            x1, y1 = (col - POINT_RADIUS), (row - POINT_RADIUS)
-            x2, y2 = (col + POINT_RADIUS), (row + POINT_RADIUS)
-            self.cur_pos_marker = self.canvas.create_oval(x1, y1, x2, y2, fill='green')
-        else:
-            old_pos = self.canvas.coords(self.cur_pos_marker)
-            dx = col - (old_pos[0] + POINT_RADIUS)
-            dy = row - (old_pos[1] + POINT_RADIUS)
-            self.canvas.move(self.cur_pos_marker, dx, dy)
+        self.draw_arrow(row, col, heading)
 
     def update_ADCP(self):
         depth = self.controller.depth
@@ -363,18 +356,26 @@ class ASV_graphics:
             self.controller.robot.xbee_callback(origin_msg)
 
     '''
-    Return points to draw arrow at row, col
+    Return points to draw arrow at x, y. Points at theta (radians)
     '''
-    def draw_arrow(self, row, col):
-        dx = 5
-        dy = 5
-        p1 = (row, col + dx)
-        p2 = (row - dy, col - 3*dx)
-        p3 = (row, col - dx)
-        p4 = (row + dy, col - 3*dx)
-        return p1, p2, p3, p4
-        
+    def draw_arrow(self, x, y, theta):
+        dx = POINT_RADIUS*1.5
+        dy = POINT_RADIUS*1.5
+        p1 = self.rotate([x + dx, y], [x,y], theta)
+        p2 = self.rotate([x - 2*dx, y - dy], [x,y], theta)
+        p3 = self.rotate([x - dx, y], [x,y], theta)
+        p4 = self.rotate([x - 2*dx, y + dy], [x,y], theta)
+        points = p1 + p2 + p3 + p4
 
+        if self.cur_pos_marker != None:
+            self.canvas.delete(self.cur_pos_marker)
+
+        self.cur_pos_marker = self.canvas.create_polygon(points, fill='yellow', outline='black')
+
+    def rotate(self, p, origin, theta):
+        x = origin[0] + (p[0]-origin[0])*np.cos(theta) + (p[1]-origin[1])*np.sin(theta)
+        y = origin[1] - (p[0]-origin[0])*np.sin(theta) + (p[1]-origin[1])*np.cos(theta)
+        return [x,y]
 
 if __name__ == '__main__':
     my_gui = ASV_graphics(None)
