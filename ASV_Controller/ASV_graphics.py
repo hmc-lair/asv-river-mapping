@@ -112,6 +112,7 @@ class ASV_graphics:
         # origin
         self.origin_x_utm = 0
         self.origin_y_utm = 0
+        self.set_origin(0,0)
 
     ###########################################################################
     # Location Conversions
@@ -250,7 +251,7 @@ class ASV_graphics:
 
         # Simulation Mode
         if self.controller.mode == "SIM MODE":
-            self.controller.robot.update_state(self.controller.robot.state_est, 10, 10)
+            self.controller.robot.update_state(self.controller.robot.state_est, 0, 0)
 
         # update the graphics
         self.tk.update()
@@ -265,7 +266,7 @@ class ASV_graphics:
         heading = self.controller.robot.state_est.theta
 
         # Convert local x y to lat lon
-        lat, lon = utm.to_latlon(x_local + self.origin_x_utm, y_local + self.origin_y_utm)
+        lat, lon = utm.to_latlon(x_local + self.origin_x_utm, y_local + self.origin_y_utm, 11, 'S')
         self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(heading) + '\n'
         
         # Convert local x y to utm
