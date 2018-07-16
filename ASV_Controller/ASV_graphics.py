@@ -341,7 +341,7 @@ class ASV_graphics:
         y_des_local = x_des_utm - self.origin_y_utm
 
         print('UTM: ', x_des_utm, y_des_utm)
-        lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
+        lat, lon = utm.to_latlon(x_des_utm, y_des_utm, 11, 'S') #11, S is UTM zone for Kern River
         print('Lat/lon: ', lat, lon)
         print('Local: ', x_des_local, y_des_local)
         
