@@ -180,7 +180,7 @@ class ASV_robot:
             uL = self.Kp * heading_diff
 
             # Simple velocity P control
-            u_nom = 10
+            u_nom = 1
             # cap the distance
             u_nom = min(max(u_nom, 0), 10)
 
@@ -561,7 +561,7 @@ class ASV_sim(ASV_robot):
     def sim_loop(self):
         uL, uR = self.point_track(self.cur_des_point)
         print("uL, uR", uL, uR)
-        self.update_state(self.state_est, uL, uR)
+        self.update_state(self.state_est, 1, 1)
         # print("Destination:", self.cur_des_point.x, self.cur_des_point.y)
 
         self.update_waypoint()
