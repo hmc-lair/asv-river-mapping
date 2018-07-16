@@ -233,6 +233,15 @@ class ASV_robot:
             self.origin_x_utm = float(parsed_data[1])
             self.origin_y_utm = float(parsed_data[2])
             # self.origin_x, self.origin_y, _, _ = utm.from_latlon(self.str_to_coord(self.origin_lat), self.str_to_coord(self.origin_long))
+        elif parsed_data[0] == "!MISSION":
+            self.way_points = []
+            for p in parsed_data[1].split(";"):
+                x, y = list(map(float, p.split(" ")))
+                des_point = ASV_state(x, y)
+                self.way_points.append(des_point)
+        elif parsed_data[0] == "!ABORTMISSION":
+            self.way_points = []
+            self.motor_stop  = True
         elif parsed_data[0] == "!STOP":
             self.motor_stop = True
         elif parsed_data[0] == "!START":

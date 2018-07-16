@@ -32,7 +32,7 @@ class ASV_graphics:
         # Control parameters
         self.robot_stopped = True
         self.quit_gui = False
-        self.mission_waypoints = [] #format [(lat, lon)...]
+        self.mission_wps = [] #format [(lat, lon)...]
 
         #######################################################################
         # GUI SECTION
@@ -50,8 +50,9 @@ class ASV_graphics:
         self.cur_pos_marker = None
         self.target_pos_marker = None
         # Mission planning
-        self.mission_mode = False
+        self.add_wps_mode = False
         self.remove_wps_mode = False
+        self.running_mission_mode = False
         self.wp_markers = []
 
         # Frames: Sidebar + Map Area
@@ -95,7 +96,7 @@ class ASV_graphics:
         self.mission_add_wps.pack()
         self.mission_remove_wps = Button(self.sidebar_frame, anchor='w', text='Remove Waypoints', command=self.on_toggle_remove_wps)
         self.mission_remove_wps.pack()
-        self.mission = Button(self.sidebar_frame, anchor='w', text='Start mission', command=self.on_toggle_mission)
+        self.mission = Button(self.sidebar_frame, anchor='w', text='Start Mission', command=self.on_toggle_mission)
         self.mission.pack()
 
         # Load map image
@@ -129,23 +130,45 @@ class ASV_graphics:
     ###########################################################################
 
     def on_toggle_mission(self):
-        print('Start mission!')
-        wps = []
-        for p in self.wp_list.get(0, END):
-            lat, lon = list(map(float, p.split(' ')[1].split(',')))
-            x, y,_, _ = utm.from_latlon(lat, lon)
-            wps.append((x,y))
-        #TODO: Send WPs to PI
-        print(wps)
+        if self.running_mission_mode:
+            self.running_mission_mode = False
+            self.mission.configure(text='Start Mission')
+            if self.controller.mode == 'HARDWARE MODE':
+                msg = '!ABORTMISSION'
+                self.controller.local_xbee.send_data_async(self.controller.boat_xbee, msg.encode())
+            print('Mission aborted!')
+        else:
+            print('Starting mission...')
+            self.running_mission_mode = True
+            self.mission.configure(text='Abort Mission')
+
+            self.mission_wps = []
+            for p in self.wp_list.get(0, END):
+                lat, lon = list(map(float, p.split(' ')[1].split(',')))
+                x, y,_, _ = utm.from_latlon(lat, lon)
+                self.mission_wps.append((x,y))
+            #Send mission waypoints to ASV and start mission
+            mission_msg = "!MISSION," 
+            for x, y in self.mission_wps:
+                mission_msg += "%f %f;" % (x, y)
+
+            #TODO: ADD COUNTDOWN BEFORE SENDING COMMANDS
+            print('Starting countdown...')
+            for i in range(10):
+                print(str(10-i))
+                time.sleep(1)
+            if self.controller.mode == 'HARDWARE MODE':
+                self.controller.local_xbee.send_data_async(self.controller.boat_xbee, mission_msg.encode())
+            print('Mission started!')
 
     def on_toggle_add_wps(self):
-        if self.mission_mode:
-            self.mission_mode = False
+        if self.add_wps_mode:
+            self.add_wps_mode = False
             self.mission_add_wps.configure(text='Add Waypoints')
         else:
-            self.mission_mode = True
+            self.add_wps_mode = True
             self.mission_add_wps.configure(text='Done Selecting Waypoints')
-        print('Mission planning mode: ', self.mission_mode)
+        print('Mission planning mode: ', self.add_wps_mode)
 
     def on_toggle_remove_wps(self):
         if self.remove_wps_mode:
@@ -183,7 +206,7 @@ class ASV_graphics:
     # Function to be called when map location clicked
     def on_location_click(self, event):
         #ADDING WAYPOINTS TO MISSION
-        if self.mission_mode:
+        if self.add_wps_mode:
             x1, y1 = (event.x - POINT_RADIUS), (event.y - POINT_RADIUS)
             x2, y2 = (event.x + POINT_RADIUS), (event.y + POINT_RADIUS)
             self.wp_markers.append(self.canvas.create_oval(x1, y1, x2, y2, fill='blue'))
@@ -338,7 +361,6 @@ class ASV_graphics:
 
             self.controller.robot.xbee_callback(way_pt_msg)
             self.controller.robot.xbee_callback(origin_msg)
-
 
 if __name__ == '__main__':
     my_gui = ASV_graphics(None)
