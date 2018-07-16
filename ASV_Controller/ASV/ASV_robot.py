@@ -574,21 +574,21 @@ class ASV_sim(ASV_robot):
     def update_state(self, state, uL, uR):
         ''' for simulation '''
         b_l = 1 # sim linear drag
-        b_r = 2 # sim rotational drag 
+        b_r = 5 # sim rotational drag 
         I_zz = 60 # sim moment of inertia 
         m = 50 # sim mass
         robot_radius = 0.5
 
        # update state
-        state.a = (uL + uR)/m + b_l/m * state.v
-        state.ang_acc = b_l / I_zz * state.omega + 1/I_zz * 2 * robot_radius * (uR - uL)
+        state.a = (uL + uR)/m - b_l/m * state.v
+        state.ang_acc = -b_r / I_zz * state.omega + 1/I_zz * 2 * robot_radius * (uR - uL)
 
         state.v = state.v + state.a * self.dt
         state.omega = state.omega + state.ang_acc * self.dt
 
         # update position
-        state.x = state.x + state.v*math.cos(state.theta) * self.dt
-        state.y = state.y + state.v*math.sin(state.theta) * self.dt
+        state.x = state.x + state.v*math.cos(self.angleDiff(-state.theta + math.pi/2)) * self.dt
+        state.y = state.y + state.v*math.sin(self.angleDiff(-state.theta + math.pi/2)) * self.dt
         state.theta = self.angleDiff(state.theta + state.omega * self.dt)
         # print(state.y)
         # self.state_est.lat, self.state_est.lon = utm.to_latlon(self.utm_x, self.utm_y, 11, 'S')

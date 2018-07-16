@@ -275,6 +275,7 @@ class ASV_graphics:
         # Simulation Mode
         if self.controller.mode == "SIM MODE":
             self.controller.robot.update_state(self.controller.robot.state_est, 0, 0)
+            print(self.controller.robot.cur_des_point.x)
 
         # update the graphics
         self.tk.update()
