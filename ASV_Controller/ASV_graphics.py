@@ -47,6 +47,7 @@ class ASV_graphics:
 
         # GUI marker variables (labels on map)
         # Go to location
+        self.goto_coords = (-1,-1) #UTM! 
         self.location_select_mode = False
         self.cur_pos_marker = None
         self.target_pos_marker = None
@@ -56,9 +57,8 @@ class ASV_graphics:
         self.running_mission_mode = False
         self.wp_markers = []
         # Origin setting
+        self.origin_coords = (0,0) #pixel coords
         self.set_origin_mode = False
-        self.origin_marker1 = None
-        self.origin_marker2 = None
 
         # Frames: Sidebar + Map Area
         self.sidebar_frame = Frame(self.tk, width=300, bg='white', height=500, relief='sunken', borderwidth=2)
@@ -68,19 +68,23 @@ class ASV_graphics:
 
         # GPS Coordinates
         self.gps_title = Label(self.sidebar_frame, anchor='w', text='ASV GPS Information', font='Helvetica 14 bold').pack()
-        self.gps = Label(self.sidebar_frame, anchor='w', width=30, text='Latitude: ???\nLongitude: ???\nHeading: ???\n')
+        self.gps = Label(self.sidebar_frame, anchor='w', width=30, text='Latitude: ???\nLongitude: ???\nHeading: ???')
+        self.gps_local = Label(self.sidebar_frame, anchor='w', width=30, text='x: ???, y: ???')
         self.gps.pack()
+        self.gps_local.pack()
 
         # ADCP Data
         self.adcp_title = Label(self.sidebar_frame, anchor='w', text='ADCP Information', font='Helvetica 14 bold').pack()
-        self.adcp_data = Label(self.sidebar_frame, anchor='w', width=30, text='Water depth: ???\nCurrent speed: ???\n')
+        self.adcp_data = Label(self.sidebar_frame, anchor='w', width=30, text='Water depth: ???\nCurrent speed: ???')
         self.adcp_data.pack()
 
         # ASV Control Panel
         self.control_title = Label(self.sidebar_frame, anchor='w', text='ASV Control Panel', font='Helvetica 14 bold').pack()
         # 1) Go to map location
-        self.control_wp = Label(self.sidebar_frame, anchor='w', width=30, text='Target Waypoint:\nLatitude: ???\nLongitude: ???\n')
+        self.control_wp = Label(self.sidebar_frame, anchor='w', width=30, text='Target Waypoint:\nLatitude: ???\nLongitude: ???')
         self.control_wp.pack()
+        self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
+        self.control_wp_dxdy.pack()
         self.goto = Button(self.sidebar_frame, anchor='w', text='Go to Map Location', command=self.on_toggle_goto)
         self.goto.pack()
         self.start_stop = Button(self.sidebar_frame, anchor='w', text='Start ASV', command=self.on_startstop)
@@ -117,6 +121,9 @@ class ASV_graphics:
         self.canvas.create_image(0,0, image=self.img, anchor=NW)
         self.canvas.pack()
         self.canvas.bind("<Button 1>", self.on_location_click)
+
+        self.origin_marker1 = self.canvas.create_line(0, -10, 0, 10, fill='black', width=2)
+        self.origin_marker2 = self.canvas.create_line(-10, 0, 10, 0, fill='black', width=2)
 
     ###########################################################################
     # Location Conversions
@@ -217,14 +224,11 @@ class ASV_graphics:
     def on_location_click(self, event):
         #CHANGE MAP ORIGIN
         if self.set_origin_mode:
-            if self.origin_marker1 != None:
-                self.canvas.delete(self.origin_marker1)
-                self.canvas.delete(self.origin_marker2)
+            self.canvas.delete(self.origin_marker1)
+            self.canvas.delete(self.origin_marker2)
             self.origin_marker1 = self.canvas.create_line(event.x, event.y-10, event.x, event.y+10, fill='black', width=2)
             self.origin_marker2 = self.canvas.create_line(event.x-10, event.y, event.x+10, event.y, fill='black', width=2)
             self.set_origin(event.x, event.y)
-            lat, lon = self.pixel_to_laton(event.x, event.y)
-            print(lat,lon)
             #Reset button
             self.set_origin_mode = False
             self.origin.configure(text='Set Map Origin')
@@ -314,7 +318,7 @@ class ASV_graphics:
 
         # Convert local x y to lat lon
         lat, lon = utm.to_latlon(x, y, 11, 'S')
-        self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(heading) + '\n'
+        self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(heading)
  
         # Convert UTM to graphing row and column
         img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x, y)
@@ -323,22 +327,21 @@ class ASV_graphics:
 
         # Update ASV location on map
         self.draw_arrow(col, row, heading)
+        self.gps_local['text'] = 'x: ' + str(col - self.origin_coords[0]) + ', y: ' + str(-row + self.origin_coords[1])
+
+        if self.goto_coords[0] != -1:
+            self.control_wp_dxdy['text'] = 'dx: ' + str(int(self.goto_coords[0]-x)) + ', dy: ' + str(int(self.goto_coords[1]-y))
 
     def update_ADCP(self):
         depth = self.controller.depth
         current = self.controller.v_boat
-        self.adcp_data['text'] = 'Water depth: ' + str(depth) + "\nCurrent speed: " + str(current) + '\n'
+        self.adcp_data['text'] = 'Water depth: ' + str(depth) + "\nCurrent speed: " + str(current)
 
     ###########################################################################
     # ASV Commands
     ###########################################################################
     def set_origin(self, col, row):
-        lat, lon = self.pixel_to_laton(col, row)
-        self.origin_x_utm, self.origin_y_utm, _,_ = utm.from_latlon(lat, lon)
-        self.controller.origin_lat = lat
-        self.controller.origin_long = lon
-        self.controller.origin_x_utm = self.origin_x_utm
-        self.controller.origin_y_utm = self.origin_y_utm
+        self.origin_coords = (col, row)
 
     #Go to location specified by mouse click (pixel coords -> GPS)
     def go_to_location(self, col, row):
@@ -348,8 +351,9 @@ class ASV_graphics:
         x, y = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
         lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
         
-        self.control_wp['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon) + '\n'
+        self.control_wp['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon)
         self.target_GPS = (lat, lon)
+        self.goto_coords = (x, y)
 
         #Send command to ASV to move to x, y
         way_point_msg = "!WP, %f, %f" % (x, y)
