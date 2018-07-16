@@ -42,12 +42,6 @@ class ASV_robot:
         self.utm_y = 0
         self.GPS_received = False
 
-        # Origin
-        self.origin_lat = 0.0
-        self.origin_long = 0.0
-        self.origin_x_utm = 0.0
-        self.origin_y_utm = 0.0
-
         self.beam_angle = 20
 
         # ADCP Data
@@ -92,7 +86,6 @@ class ASV_robot:
         self.update_waypoint()
         
         # print("Current Destination: ", self.cur_des_point.x, self.cur_des_point.y)
-        # print("Current Origin: ", self.origin_x, self.origin_y)
         print("Dest X Y: ", self.cur_des_point.x, self.cur_des_point.y)
         print("robot x y: ", self.state_est.x, self.state_est.y)
         print("Heading: ", self.heading)
@@ -193,8 +186,8 @@ class ASV_robot:
     def localize_with_GPS(self):
         '''state estimate with GPS'''
         # 1. Update position with GPS
-        # self.state_est.x = self.utm_x - self.origin_x
-        # self.state_est.y = self.utm_y - self.origin_y
+        # self.state_est.x = self.utm_x
+        # self.state_est.y = self.utm_y
         self.GPS_received = False
 
 
@@ -229,10 +222,6 @@ class ASV_robot:
             self.cur_des_point.x = float(parsed_data[1]) # way point in local x, y
             self.cur_des_point.y = float(parsed_data[2]) 
             self.add_way_points(self.cur_des_point)
-        elif parsed_data[0] == "!ORIGIN":
-            self.origin_x_utm = float(parsed_data[1])
-            self.origin_y_utm = float(parsed_data[2])
-            # self.origin_x, self.origin_y, _, _ = utm.from_latlon(self.str_to_coord(self.origin_lat), self.str_to_coord(self.origin_long))
         elif parsed_data[0] == "!MISSION":
             self.way_points = []
             for p in parsed_data[1].split(";"):
@@ -287,8 +276,8 @@ class ASV_robot:
                 self.state_est.lat = self.str_to_coord(raw_msg[2])
                 self.state_est.lon = -self.str_to_coord(raw_msg[4])
                 self.utm_x, self.utm_y, _, _ = utm.from_latlon(self.state_est.lat, self.state_est.lon)       
-                self.state_est.x = self.utm_x - self.origin_x_utm
-                self.state_est.y = self.utm_y - self.origin_y_utm
+                self.state_est.x = self.utm_x
+                self.state_est.y = self.utm_y
                 self.GPS_received = True
             else:
                 self.GPS_received = False

@@ -55,6 +55,10 @@ class ASV_graphics:
         self.remove_wps_mode = False
         self.running_mission_mode = False
         self.wp_markers = []
+        # Origin setting
+        self.set_origin_mode = False
+        self.origin_marker1 = None
+        self.origin_marker2 = None
 
         # Frames: Sidebar + Map Area
         self.sidebar_frame = Frame(self.tk, width=300, bg='white', height=500, relief='sunken', borderwidth=2)
@@ -74,7 +78,6 @@ class ASV_graphics:
 
         # ASV Control Panel
         self.control_title = Label(self.sidebar_frame, anchor='w', text='ASV Control Panel', font='Helvetica 14 bold').pack()
-
         # 1) Go to map location
         self.control_wp = Label(self.sidebar_frame, anchor='w', width=30, text='Target Waypoint:\nLatitude: ???\nLongitude: ???\n')
         self.control_wp.pack()
@@ -82,7 +85,6 @@ class ASV_graphics:
         self.goto.pack()
         self.start_stop = Button(self.sidebar_frame, anchor='w', text='Start ASV', command=self.on_startstop)
         self.start_stop.pack()
-
         # 2) Mission planning
         self.mission_title = Label(self.sidebar_frame, anchor='w', text='Mission Planning', font='Helvetica 14 bold').pack()
         scrollbar = Scrollbar(self.sidebar_frame)
@@ -99,6 +101,11 @@ class ASV_graphics:
         self.mission_remove_wps.pack()
         self.mission = Button(self.sidebar_frame, anchor='w', text='Start Mission', command=self.on_toggle_mission)
         self.mission.pack()
+
+        # Map Configuration
+        self.map_config = Label(self.sidebar_frame, anchor='w', text='Map Configuration', font='Helvetica 14 bold').pack()
+        self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
+        self.origin.pack()
 
         # Load map image
         pilImg = Image.open(MAP_FILE)
@@ -195,6 +202,14 @@ class ASV_graphics:
             lat, lon = self.pixel_to_laton(x0 + POINT_RADIUS, y0 + POINT_RADIUS)
             print(lat, lon)
 
+    def on_toggle_set_origin(self):
+        if self.set_origin_mode:
+            self.set_origin_mode = False
+            self.origin.configure(text='Set Map Origin')
+        else:
+            self.set_origin_mode = True
+            self.origin.configure(text='Select Map Origin...')
+
     def on_toggle_goto(self):
         if self.location_select_mode:
             self.location_select_mode = False
@@ -202,12 +217,25 @@ class ASV_graphics:
         else:
             self.location_select_mode = True
             self.goto.configure(text='Select Map Location...')
-        print('Go to map location mode: ', self.location_select_mode)
 
     # Function to be called when map location clicked
     def on_location_click(self, event):
+        #CHANGE MAP ORIGIN
+        if self.set_origin_mode:
+            if self.origin_marker1 != None:
+                self.canvas.delete(self.origin_marker1)
+                self.canvas.delete(self.origin_marker2)
+            self.origin_marker1 = self.canvas.create_line(event.x, event.y-10, event.x, event.y+10, fill='black', width=2)
+            self.origin_marker2 = self.canvas.create_line(event.x-10, event.y, event.x+10, event.y, fill='black', width=2)
+            self.set_origin(event.x, event.y)
+            lat, lon = self.pixel_to_laton(event.x, event.y)
+            print(lat,lon)
+            #Reset button
+            self.set_origin_mode = False
+            self.origin.configure(text='Set Map Origin')
+
         #ADDING WAYPOINTS TO MISSION
-        if self.add_wps_mode:
+        elif self.add_wps_mode:
             x1, y1 = (event.x - POINT_RADIUS), (event.y - POINT_RADIUS)
             x2, y2 = (event.x + POINT_RADIUS), (event.y + POINT_RADIUS)
             self.wp_markers.append(self.canvas.create_oval(x1, y1, x2, y2, fill='blue'))
@@ -285,26 +313,24 @@ class ASV_graphics:
 
     def update_GPS(self):
         '''Get local x, y coordinate from robot. Then convert to utm for graphing'''
-        x_local = self.controller.robot.state_est.x
-        y_local = self.controller.robot.state_est.y
+        x = self.controller.robot.state_est.x
+        y = self.controller.robot.state_est.y
         heading = self.controller.robot.state_est.theta
 
+        if self.controller.mode == 'SIM MODE':
+            x, y = gdal.ApplyGeoTransform(self.geo_trans, x, y)
+
         # Convert local x y to lat lon
-        lat, lon = utm.to_latlon(x_local + self.origin_x_utm, y_local + self.origin_y_utm, 11, 'S')
+        lat, lon = utm.to_latlon(x, y, 11, 'S')
         self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(heading) + '\n'
-        
-        # Convert local x y to utm
-        x_utm = self.origin_x_utm + x_local
-        y_utm = self.origin_y_utm + y_local
-
+ 
         # Convert UTM to graphing row and column
-        img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x_utm, y_utm)
-
+        img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x, y)
         row = int(img_row*MAP_HEIGHT/IMAGE_HEIGHT)
         col = int(img_col*MAP_WIDTH/IMAGE_WIDTH)
 
         # Update ASV location on map
-        self.draw_arrow(row, col, heading)
+        self.draw_arrow(col, row, heading)
 
     def update_ADCP(self):
         depth = self.controller.depth
@@ -314,11 +340,13 @@ class ASV_graphics:
     ###########################################################################
     # ASV Commands
     ###########################################################################
-    def set_origin(self, row, col):
-        # Send map origin to PI
-        x, y = gdal.ApplyGeoTransform(self.geo_trans, row, col)
-        self.origin_x_utm = x
-        self.origin_y_utm = y
+    def set_origin(self, col, row):
+        lat, lon = self.pixel_to_laton(col, row)
+        self.origin_x_utm, self.origin_y_utm, _,_ = utm.from_latlon(lat, lon)
+        self.controller.origin_lat = lat
+        self.controller.origin_long = lon
+        self.controller.origin_x_utm = self.origin_x_utm
+        self.controller.origin_y_utm = self.origin_y_utm
 
     #Go to location specified by mouse click (pixel coords -> GPS)
     def go_to_location(self, col, row):
