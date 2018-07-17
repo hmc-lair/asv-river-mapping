@@ -47,6 +47,7 @@ class ASV_graphics:
 
         # GUI marker variables (labels on map)
         # Go to location
+        self.goto_coords = (-1,-1) #UTM! 
         self.location_select_mode = False
         self.cur_pos_marker = None
         self.target_pos_marker = None
@@ -55,6 +56,9 @@ class ASV_graphics:
         self.remove_wps_mode = False
         self.running_mission_mode = False
         self.wp_markers = []
+        # Origin setting
+        self.origin_coords = (0,0) #pixel coords
+        self.set_origin_mode = False
 
         # Frames: Sidebar + Map Area
         self.sidebar_frame = Frame(self.tk, width=300, bg='white', height=500, relief='sunken', borderwidth=2)
@@ -64,25 +68,27 @@ class ASV_graphics:
 
         # GPS Coordinates
         self.gps_title = Label(self.sidebar_frame, anchor='w', text='ASV GPS Information', font='Helvetica 14 bold').pack()
-        self.gps = Label(self.sidebar_frame, anchor='w', width=30, text='Latitude: ???\nLongitude: ???\nHeading: ???\n')
+        self.gps = Label(self.sidebar_frame, anchor='w', width=30, text='Latitude: ???\nLongitude: ???\nHeading: ???')
+        self.gps_local = Label(self.sidebar_frame, anchor='w', width=30, text='x: ???, y: ???')
         self.gps.pack()
+        self.gps_local.pack()
 
         # ADCP Data
         self.adcp_title = Label(self.sidebar_frame, anchor='w', text='ADCP Information', font='Helvetica 14 bold').pack()
-        self.adcp_data = Label(self.sidebar_frame, anchor='w', width=30, text='Water depth: ???\nCurrent speed: ???\n')
+        self.adcp_data = Label(self.sidebar_frame, anchor='w', width=30, text='Water depth: ???\nCurrent speed: ???')
         self.adcp_data.pack()
 
         # ASV Control Panel
         self.control_title = Label(self.sidebar_frame, anchor='w', text='ASV Control Panel', font='Helvetica 14 bold').pack()
-
         # 1) Go to map location
-        self.control_wp = Label(self.sidebar_frame, anchor='w', width=30, text='Target Waypoint:\nLatitude: ???\nLongitude: ???\n')
+        self.control_wp = Label(self.sidebar_frame, anchor='w', width=30, text='Target Waypoint:\nLatitude: ???\nLongitude: ???')
         self.control_wp.pack()
+        self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
+        self.control_wp_dxdy.pack()
         self.goto = Button(self.sidebar_frame, anchor='w', text='Go to Map Location', command=self.on_toggle_goto)
         self.goto.pack()
         self.start_stop = Button(self.sidebar_frame, anchor='w', text='Start ASV', command=self.on_startstop)
         self.start_stop.pack()
-
         # 2) Mission planning
         self.mission_title = Label(self.sidebar_frame, anchor='w', text='Mission Planning', font='Helvetica 14 bold').pack()
         scrollbar = Scrollbar(self.sidebar_frame)
@@ -100,6 +106,11 @@ class ASV_graphics:
         self.mission = Button(self.sidebar_frame, anchor='w', text='Start Mission', command=self.on_toggle_mission)
         self.mission.pack()
 
+        # Map Configuration
+        self.map_config = Label(self.sidebar_frame, anchor='w', text='Map Configuration', font='Helvetica 14 bold').pack()
+        self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
+        self.origin.pack()
+
         # Load map image
         pilImg = Image.open(MAP_FILE)
         pilImg = pilImg.resize((MAP_WIDTH,MAP_HEIGHT), Image.ANTIALIAS)
@@ -111,10 +122,8 @@ class ASV_graphics:
         self.canvas.pack()
         self.canvas.bind("<Button 1>", self.on_location_click)
 
-        # origin
-        self.origin_x_utm = 0
-        self.origin_y_utm = 0
-        self.set_origin(0,0)
+        self.origin_marker1 = self.canvas.create_line(0, -10, 0, 10, fill='black', width=2)
+        self.origin_marker2 = self.canvas.create_line(-10, 0, 10, 0, fill='black', width=2)
 
     ###########################################################################
     # Location Conversions
@@ -198,6 +207,14 @@ class ASV_graphics:
             lat, lon = self.pixel_to_laton(x0 + POINT_RADIUS, y0 + POINT_RADIUS)
             print(lat, lon)
 
+    def on_toggle_set_origin(self):
+        if self.set_origin_mode:
+            self.set_origin_mode = False
+            self.origin.configure(text='Set Map Origin')
+        else:
+            self.set_origin_mode = True
+            self.origin.configure(text='Select Map Origin...')
+
     def on_toggle_goto(self):
         if self.location_select_mode:
             self.location_select_mode = False
@@ -205,12 +222,22 @@ class ASV_graphics:
         else:
             self.location_select_mode = True
             self.goto.configure(text='Select Map Location...')
-        print('Go to map location mode: ', self.location_select_mode)
 
     # Function to be called when map location clicked
     def on_location_click(self, event):
+        #CHANGE MAP ORIGIN
+        if self.set_origin_mode:
+            self.canvas.delete(self.origin_marker1)
+            self.canvas.delete(self.origin_marker2)
+            self.origin_marker1 = self.canvas.create_line(event.x, event.y-10, event.x, event.y+10, fill='black', width=2)
+            self.origin_marker2 = self.canvas.create_line(event.x-10, event.y, event.x+10, event.y, fill='black', width=2)
+            self.set_origin(event.x, event.y)
+            #Reset button
+            self.set_origin_mode = False
+            self.origin.configure(text='Set Map Origin')
+
         #ADDING WAYPOINTS TO MISSION
-        if self.add_wps_mode:
+        elif self.add_wps_mode:
             x1, y1 = (event.x - POINT_RADIUS), (event.y - POINT_RADIUS)
             x2, y2 = (event.x + POINT_RADIUS), (event.y + POINT_RADIUS)
             self.wp_markers.append(self.canvas.create_oval(x1, y1, x2, y2, fill='blue'))
@@ -288,75 +315,58 @@ class ASV_graphics:
 
     def update_GPS(self):
         '''Get local x, y coordinate from robot. Then convert to utm for graphing'''
-        x_local = self.controller.robot.state_est.x
-        y_local = self.controller.robot.state_est.y
+        x = self.controller.robot.state_est.x
+        y = self.controller.robot.state_est.y
         heading = self.controller.robot.state_est.theta
 
         # Convert local x y to lat lon
-        lat, lon = utm.to_latlon(x_local + self.origin_x_utm, y_local + self.origin_y_utm, 11, 'S')
-        self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(heading) + '\n'
-        
-        # Convert local x y to utm
-        x_utm = self.origin_x_utm + x_local
-        y_utm = self.origin_y_utm + y_local
-
+        lat, lon = utm.to_latlon(x, y, 11, 'S')
+        self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(heading)
+ 
         # Convert UTM to graphing row and column
-        img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x_utm, y_utm)
-
+        img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x, y)
         row = int(img_row*MAP_HEIGHT/IMAGE_HEIGHT)
         col = int(img_col*MAP_WIDTH/IMAGE_WIDTH)
 
         # Update ASV location on map
         self.draw_arrow(col, row, heading)
+        self.gps_local['text'] = 'x: ' + str(col - self.origin_coords[0]) + ', y: ' + str(-row + self.origin_coords[1])
+
+        if self.goto_coords[0] != -1:
+            self.control_wp_dxdy['text'] = 'dx: ' + str(int(self.goto_coords[0]-x)) + ', dy: ' + str(int(self.goto_coords[1]-y))
 
     def update_ADCP(self):
         depth = self.controller.depth
         current = self.controller.v_boat
-        self.adcp_data['text'] = 'Water depth: ' + str(depth) + "\nCurrent speed: " + str(current) + '\n'
+        self.adcp_data['text'] = 'Water depth: ' + str(depth) + "\nCurrent speed: " + str(current)
 
     ###########################################################################
     # ASV Commands
     ###########################################################################
-    def set_origin(self, row, col):
-        # Send map origin to PI
-        x, y = gdal.ApplyGeoTransform(self.geo_trans, row, col)
-        self.origin_x_utm = x
-        self.origin_y_utm = y
+    def set_origin(self, col, row):
+        self.origin_coords = (col, row)
 
     #Go to location specified by mouse click (pixel coords -> GPS)
     def go_to_location(self, col, row):
         img_col = int(col*IMAGE_WIDTH/MAP_WIDTH)
         img_row = int(row*IMAGE_HEIGHT/MAP_HEIGHT)
 
-        # Send map origin to PI
-        self.set_origin(0,0)
-        command_msg = "!ORIGIN, %f, %f" % (self.origin_x_utm, self.origin_y_utm)
-
-        x_des_utm, y_des_utm = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
-        x_des_local = x_des_utm - self.origin_x_utm # convert to local coordinate
-        y_des_local = y_des_utm - self.origin_y_utm
-
-        print('UTM: ', x_des_utm, y_des_utm)
-        lat, lon = utm.to_latlon(x_des_utm, y_des_utm, 11, 'S') #11, S is UTM zone for Kern River
-        print('Lat/lon: ', lat, lon)
-        print('Local: ', x_des_local, y_des_local)
+        x, y = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
+        lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
         
-        self.control_wp['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon) + '\n'
+        self.control_wp['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon)
         self.target_GPS = (lat, lon)
+        self.goto_coords = (x, y)
 
         #Send command to ASV to move to x, y
-        way_point_msg = "!WP, %f, %f" % (x_des_local, y_des_local)
+        way_point_msg = "!WP, %f, %f" % (x, y)
 
         # Sending data over
         if self.controller.mode == 'HARDWARE MODE':
-            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
         else:
             way_pt_msg = XBeeModel.message.XBeeMessage(way_point_msg.encode(), None, None)
-            origin_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
-
             self.controller.robot.xbee_callback(way_pt_msg)
-            self.controller.robot.xbee_callback(origin_msg)
 
     '''
     Return points to draw arrow at x, y. Points at theta (radians)
