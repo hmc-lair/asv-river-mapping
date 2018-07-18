@@ -36,6 +36,7 @@ class ASV_robot:
         self.rudder = 0.0
         self.R_motor = 0.0
         self.L_motor = 0.0
+        self.motor_threshold = 500
 
         # GPS Data and Coordinate
         self.GPS_fix_quality = 0
@@ -167,7 +168,8 @@ class ASV_robot:
                 (des_point.x - self.state_est.x)**2)
 
         if distance <= self.dist_threshold or self.des_reached:
-            print('Destination reached! Turning off motors.')
+            if self.des_reached == False: # Just print the first time destination reached
+                print('Destination reached! Turning off motors.')
             self.des_reached = True
             u_starboard = 0.0
             u_port = 0.0
@@ -185,8 +187,8 @@ class ASV_robot:
             # cap the distance
             u_nom = min(max(u_nom, 0), 1)
 
-            u_starboard = u_nom + uR
-            u_port = u_nom + uL
+            u_starboard = min(u_nom + uR, self.motor_threshold)
+            u_port = min(u_nom + uL, self.motor_threshold)
 
         return u_starboard, u_port
 
