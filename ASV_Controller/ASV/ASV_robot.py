@@ -21,7 +21,7 @@ class ASV_robot:
         self.cur_des_point.set_state(1,1,1)
         self.way_points = [self.cur_des_point]
         self.des_reached = True
-        self.dist_threshold = 1
+        self.dist_threshold = 2
         self.dt = 0.01
 
         self.motor_stop = False
@@ -167,6 +167,7 @@ class ASV_robot:
                 (des_point.x - self.state_est.x)**2)
 
         if distance <= self.dist_threshold or self.des_reached:
+            print('Destination reached! Turning off motors.')
             self.des_reached = True
             u_starboard = 0.0
             u_port = 0.0

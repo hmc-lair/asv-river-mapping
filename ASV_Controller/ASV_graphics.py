@@ -160,7 +160,7 @@ class ASV_graphics:
             #Send mission waypoints to ASV and start mission
             mission_msg = "!MISSION," 
             for x, y in self.mission_wps:
-                mission_msg += "%f %f;" % (x-self.origin_x_utm, y-self.origin_y_utm)
+                mission_msg += "%f %f;" % (x, y)
 
             #TODO: ADD COUNTDOWN BEFORE SENDING COMMANDS
             print('Starting countdown...')
