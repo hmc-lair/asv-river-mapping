@@ -47,10 +47,16 @@ class ASV_robot:
 
         self.beam_angle = 20
 
-        # ADCP Data
+        # magnetometer data
         self.roll = 0.0
         self.pitch = 0.0
         self.heading = 0.0
+        self.mag_received = True
+
+        # ADCP Data
+        self.ADCP_roll = 0.0
+        self.ADCP_pitch = 0.0
+        self.ADCP_heading = 0.0
         self.v_boat = [0, 0]
         self.depths = [0, 0, 0, 0]
         self.bt_boat_beams = [0, 0, 0,0]
@@ -59,6 +65,7 @@ class ASV_robot:
         # threads
         self.GPS_thread = None
         self.ADCP_thread = None
+        self.mag_thread = None
 
         # Program termination
         self.terminate = False
@@ -83,20 +90,25 @@ class ASV_robot:
         if self.ADCP_received:
             self.localize_with_ADCP()
 
+        if self.mag_received:
+            # self.localize_with_mag()
+            print(self.state_est.theta)
+
         # 3. Motion plan
         # time.sleep(0.5)
         # Set destination 
         self.update_waypoint()
         
         # print("Current Destination: ", self.cur_des_point.x, self.cur_des_point.y)
-        print("Dest X Y: ", self.cur_des_point.x, self.cur_des_point.y)
-        print("robot x y: ", self.state_est.x, self.state_est.y)
-        print("Heading: ", self.heading)
+        # print("Dest X Y: ", self.cur_des_point.x, self.cur_des_point.y)
+        # print("robot x y: ", self.state_est.x, self.state_est.y)
+        # print("Heading: ", self.heading)
         # Compute control signal
         strboard, port = self.point_track(self.cur_des_point)
 
         # 4. Update control signals
-        self.update_control(strboard, port)
+        # self.update_control(strboard, port)
+        self.update_control(strboard,port)
 
         # time.sleep(0.1)
 
@@ -107,7 +119,7 @@ class ASV_robot:
 
     def robot_setup(self):
         print('Setting up...')
-        self.environment.start_ping()
+        # self.environment.start_ping()
         # Initialize GPS thread
         self.GPS_thread = threading.Thread(name = 'GPS Thread', target = self.update_GPS)
         self.GPS_thread.setDaemon(True)
@@ -115,6 +127,10 @@ class ASV_robot:
         # Initilialize ADCP thread
         self.ADCP_thread = threading.Thread(name = 'ADCP Thread', target = self.update_ADCP)
         self.ADCP_thread.setDaemon(True)
+
+        # Initialize Magnetometer thread
+        self.mag_thread = threading.Thread(name = 'ADCP Thread', target = self.update_mag)
+        self.mag_thread.setDaemon(True)
 
         # Create Xbee call back for communication
         if self.environment.dest_xbee == None:
@@ -127,6 +143,7 @@ class ASV_robot:
         # Begin threads
         self.GPS_thread.start()
         self.ADCP_thread.start()
+        self.mag_thread.start()
 
     def robot_shutdown(self):
         self.update_control(0, 0)
@@ -137,10 +154,10 @@ class ASV_robot:
         # self.starboard_ser.write('!G 1 %d', L)
         # self.port_ser.write('!G 1 %d', R)
         # print("Starboard: %f Port: %f" % (L, R))
-        if self.motor_stop == True:
-            print("Port %f Starboard: %f" % (0, 0))
-        else:
-            print("Port: %f Starboard: %f" % (L, R))
+        # if self.motor_stop == True:
+        #     print("Port %f Starboard: %f" % (0, 0))
+        # else:
+        #     print("Port: %f Starboard: %f" % (L, R))
         pass
 
     def update_waypoint(self):
@@ -196,10 +213,13 @@ class ASV_robot:
     def localize_with_GPS(self):
         '''state estimate with GPS'''
         # 1. Update position with GPS
-        # self.state_est.x = self.utm_x
-        # self.state_est.y = self.utm_y
+        self.state_est.x = self.utm_x
+        self.state_est.y = self.utm_y
         self.GPS_received = False
 
+    def localize_with_mag(self):
+        self.state_est.theta = self.angleDiff((-self.heading+90)/180 * math.pi)
+        self.mag_received = False
 
     def predict(self):
         '''Predict with just the internal states of the robot'''
@@ -209,7 +229,7 @@ class ASV_robot:
 
     def localize_with_ADCP(self):
         '''state estimate with DVL'''
-        self.state_est.theta = self.heading / 180 * math.pi
+        # self.state_est.theta = self.heading / 180 * math.pi
         # self.v_boat[0], self.v_boat[1] = self.convert_bt_velocities(self.roll, self.pitch, self.heading, self.bt_boat_beams)
         self.ADCP_received = False
 
@@ -258,6 +278,22 @@ class ASV_robot:
             # print(msg)
             msg_binary = msg.encode()
             self.environment.my_xbee.send_data_async(self.environment.dest_xbee, msg_binary)
+
+###############################################################################
+# Magnetometer Functions
+###############################################################################
+    def update_mag(self):
+        while True:
+            if self.terminate == True:
+                break
+            else:
+                data_str = self.environment.mag_ser.readline()
+                mag_data =data_str.decode().split(',')
+                # self.all_data_f.write(data_str)
+                self.heading = float(mag_data[1])
+                self.pitch = float(mag_data[2])
+                self.roll = float(mag_data[3])
+                self.mag_received = True
 
 ###############################################################################
 # GPS Functions
@@ -314,9 +350,9 @@ class ASV_robot:
             else:
                 ensemble = self.read_ensemble(verbose=False)
                 data = self.extract_data(ensemble)
-                self.heading = self.angleDiff_deg(data[0] - self.adcp_angle_offset)
-                self.roll = data[1]
-                self.pitch = data[2]
+                self.ADCP_heading = self.angleDiff_deg(data[0] - self.adcp_angle_offset)
+                self.ADCP_roll = data[1]
+                self.ADCP_pitch = data[2]
                 self.depths = data[3:7]
                 self.bt_boat_beams = data[7:11]
                 self.ADCP_received = True

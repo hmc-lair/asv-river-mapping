@@ -1,6 +1,5 @@
 import serial
 import time
-from xbee import XBee
 from digi.xbee.devices import XBeeDevice
 
 class ASV_environment:
@@ -11,14 +10,13 @@ class ASV_environment:
         self.data_stream = '' # current data stream from the xbee
 
         # Initialize port names
-        self.GPS_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VW9AR-if00-port0' #Pi ADCP
-        # self.GPS_PORT = '/dev/tty.usbserial-FT8VW9AR'
-        # self.XBEE_PORT = '/dev/tty.usbserial-DN02Z6QY'
+        self.GPS_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDEF-if00-port0' #Pi ADCP
         self.XBEE_PORT = '/dev/serial/by-id/usb-FTDI_FT231X_USB_UART_DN02Z3LX-if00-port0'
         self.ADCP_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDWP-if00-port0'
-        # self.ADCP_PORT = '/dev/tty.usbserial-FT8VWDWP'
-        self.starboard_PORT = ''
-        self.port_PORT = ''
+        self.mag_port = '/dev/serial/by-id/usb-Teensyduino_USB_Serial_2770350-if00'
+        # self.mag_port = '/dev/tty.usbmodem2770351'
+        self.starboard_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDWP-if00-port0'
+        self.port_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDWP-if00-port0'
         self.servo_PORT = ''
 
         # serial ports
@@ -28,6 +26,7 @@ class ASV_environment:
         self.starboard_ser = None
         self.port_ser = None
         self.ADCP_ser = None
+        self.mag_ser = None # magnetometer
 
         # Create serial port
         self.robot_mode = "HARDWARE MODE" # HARDWARE MODE
@@ -35,9 +34,10 @@ class ASV_environment:
         # Setup Hardware
         if (self.robot_mode == "HARDWARE MODE"):
             self.setup_GPS()
-            # self.setup_motors()
+            self.setup_motors()
             self.setup_ADCP()
             self.dest_xbee = self.discover_xbee()
+            self.setup_magnetometer()
 
 
     def setup_GPS(self):
@@ -45,13 +45,17 @@ class ASV_environment:
         self.GPS_ser.baudrate = 19200
         self.GPS_ser.parity = serial.PARITY_NONE
         self.GPS_ser.stop_bits = serial.STOPBITS_ONE
-        self.GPS_ser.write("$JASC,GPGGA,20" + b'\r\n')
+        self.GPS_ser.write("$JASC,GPGGA,20".encode() + b'\r\n')
         time.sleep(0.1)
         self.GPS_ser.flushInput()
 
     def setup_motors(self):
         self.port_ser = serial.Serial(self.port_PORT, 115200)
         self.starboard_ser = serial.Serial(self.starboard_PORT, 115200)
+
+    def setup_magnetometer(self):
+        self.mag_ser = serial.Serial(self.mag_port, 9600)
+        self.mag_ser.flushInput()
 
 ###############################################################################
 # ADCP Functions
