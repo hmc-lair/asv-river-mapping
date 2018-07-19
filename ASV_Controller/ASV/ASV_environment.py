@@ -12,10 +12,10 @@ class ASV_environment:
         # Initialize port names
         self.GPS_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDEF-if00-port0' #Pi ADCP
         self.XBEE_PORT = '/dev/serial/by-id/usb-FTDI_FT231X_USB_UART_DN02Z3LX-if00-port0'
-        self.ADCP_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDWP-if00-port0'
+        self.ADCP_PORT = '/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_D-if00-port0'
         self.mag_port = '/dev/serial/by-id/usb-Teensyduino_USB_Serial_2770350-if00'
         # self.mag_port = '/dev/tty.usbmodem2770351'
-        self.starboard_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDWP-if00-port0'
+        self.starboard_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VW9AR-if00-port0'
         self.port_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDWP-if00-port0'
         self.servo_PORT = ''
 
@@ -28,6 +28,8 @@ class ASV_environment:
         self.ADCP_ser = None
         self.mag_ser = None # magnetometer
 
+        self.disable_xbee = False
+
         # Create serial port
         self.robot_mode = "HARDWARE MODE" # HARDWARE MODE
         
@@ -35,9 +37,14 @@ class ASV_environment:
         if (self.robot_mode == "HARDWARE MODE"):
             self.setup_GPS()
             self.setup_motors()
-            self.setup_ADCP()
-            self.dest_xbee = self.discover_xbee()
+            # self.setup_ADCP()
             self.setup_magnetometer()
+            
+            if self.disable_xbee == True:
+                print('xbee disabled')
+            else:
+                self.dest_xbee = self.discover_xbee()
+                
 
 
     def setup_GPS(self):
@@ -45,7 +52,7 @@ class ASV_environment:
         self.GPS_ser.baudrate = 19200
         self.GPS_ser.parity = serial.PARITY_NONE
         self.GPS_ser.stop_bits = serial.STOPBITS_ONE
-        self.GPS_ser.write("$JASC,GPGGA,20".encode() + b'\r\n')
+        self.GPS_ser.write("$JASC,GPGGA,1".encode() + b'\r\n')
         time.sleep(0.1)
         self.GPS_ser.flushInput()
 

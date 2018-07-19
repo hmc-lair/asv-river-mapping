@@ -92,8 +92,9 @@ class ASV_robot:
             self.localize_with_ADCP()
 
         if self.mag_received:
-            # self.localize_with_mag()
-            print(self.state_est.theta)
+            self.localize_with_mag()
+            # print("Heading: ", self.angleDiff_deg(self.heading))
+            # print("Theta:", self.state_est.theta)
 
         # 3. Motion plan
         # time.sleep(0.5)
@@ -108,11 +109,17 @@ class ASV_robot:
         strboard, port = self.point_track(self.cur_des_point)
 
         # 4. Update control signals
+        self.update_control(0, 0)
+        # print("Right, Left: ", strboard, port)  
+        if (strboard > port):
+            print("turning left")
+        elif (strboard < port):
+            print("turning right")
         # self.update_control(strboard, port)
-        self.update_control(strboard,port)
 
-        # time.sleep(0.1)
+        time.sleep(0.2)
 
+        # print("working?")
         self.report_to_shore()
 
         if self.terminate == True:
@@ -121,6 +128,7 @@ class ASV_robot:
     def robot_setup(self):
         print('Setting up...')
         # self.environment.start_ping()
+
         # Initialize GPS thread
         self.GPS_thread = threading.Thread(name = 'GPS Thread', target = self.update_GPS)
         self.GPS_thread.setDaemon(True)
@@ -134,26 +142,32 @@ class ASV_robot:
         self.mag_thread.setDaemon(True)
 
         # Create Xbee call back for communication
-        if self.environment.dest_xbee == None:
-            self.terminate = True
-            self.robot_shutdown()
+        if self.environment.disable_xbee == True:
+            pass
         else:
-            self.environment.my_xbee.add_data_received_callback(self.xbee_callback)
+            if self.environment.dest_xbee == None:
+                self.terminate = True
+                self.robot_shutdown()
+            else:
+                self.environment.my_xbee.add_data_received_callback(self.xbee_callback)
 
         print('Starting main loop...')
         # Begin threads
         self.GPS_thread.start()
-        self.ADCP_thread.start()
+        # self.ADCP_thread.start()
         self.mag_thread.start()
 
     def robot_shutdown(self):
         self.update_control(0, 0)
-        self.environment.my_xbee.close()
+        if self.environment.disable_xbee != True:
+            self.environment.my_xbee.close()
 
     def update_control(self, L, R):
         '''Send command messages to the ASV'''
-        # self.starboard_ser.write('!G 1 %d', L)
-        # self.port_ser.write('!G 1 %d', R)
+        left_command = '!G 1 %d' % L
+        right_command = '!G 1 %d' % R
+        self.environment.starboard_ser.write(left_command.encode() + b'\r\n')
+        self.environment.port_ser.write(right_command.encode() + b'\r\n')
         # print("Starboard: %f Port: %f" % (L, R))
         # if self.motor_stop == True:
         #     print("Port %f Starboard: %f" % (0, 0))
@@ -203,17 +217,20 @@ class ASV_robot:
             uL = self.Kp * ang_error + (ang_error - self.last_ang_error)/self.dt * self.Kd + (ang_error - self.last_ang_error)*self.dt*self.Ki
             self.last_ang_error = ang_error
             
-            u_nom = 1
-            if (abs(ang_error) >= 0.2):
-                u_nom = 0
+            u_nom = 200
+            # if (abs(ang_error) >= 0.2):
+            #     u_nom = 0
             
+            uR = uR * 10
+            uL = uL * 10
+
             # cap the distance
-            u_nom = min(max(u_nom, 0), 1)
+            # u_nom = min(max(u_nom, 0), 100)
 
             u_starboard = min(u_nom + uR, self.motor_threshold)
             u_port = min(u_nom + uL, self.motor_threshold)
 
-        return u_starboard, u_port
+        return u_port, u_starboard
 
     def log_data(self):
         '''Log relevant data'''
@@ -227,7 +244,7 @@ class ASV_robot:
         self.GPS_received = False
 
     def localize_with_mag(self):
-        self.state_est.theta = self.angleDiff((-self.heading+90)/180 * math.pi)
+        self.state_est.theta = self.angleDiff((self.heading)/180 * math.pi)
         self.mag_received = False
 
     def predict(self):
@@ -285,12 +302,14 @@ class ASV_robot:
 
     def report_to_shore(self):
         '''Send information back to shore'''
-        if self.terminate == False:
-            average_depth = sum(self.depths)/len(self.depths)
-            msg = "!DATA, %f, %f, %f, %f, %f, %f" % (self.state_est.x, self.state_est.y, self.heading, average_depth, self.v_boat[0], self.v_boat[1])
-            # print(msg)
-            msg_binary = msg.encode()
-            self.environment.my_xbee.send_data_async(self.environment.dest_xbee, msg_binary)
+        if self.environment.disable_xbee == True:
+            pass
+        else:
+            if self.terminate == False:
+                average_depth = sum(self.depths)/len(self.depths)
+                msg = "!DATA, %f, %f, %f, %f, %f, %f" % (self.state_est.x, self.state_est.y, self.heading, average_depth, self.v_boat[0], self.v_boat[1])
+                msg_binary = msg.encode()
+                self.environment.my_xbee.send_data_async(self.environment.dest_xbee, msg_binary)
 
 ###############################################################################
 # Magnetometer Functions
@@ -303,7 +322,7 @@ class ASV_robot:
                 data_str = self.environment.mag_ser.readline()
                 mag_data =data_str.decode().split(',')
                 # self.all_data_f.write(data_str)
-                self.heading = float(mag_data[1])
+                self.heading = float(mag_data[1]) + 90
                 self.pitch = float(mag_data[2])
                 self.roll = float(mag_data[3])
                 self.mag_received = True
@@ -312,6 +331,7 @@ class ASV_robot:
 # GPS Functions
 ###############################################################################
     def update_GPS(self):
+        # TODO: if no lock add a hard stop
         while True:
             if self.terminate == True:
                 break
@@ -332,23 +352,27 @@ class ASV_robot:
         raw_msg = data_decoded.split(',')
         if raw_msg[0] == '$GPGGA':
             self.GPS_fix_quality = raw_msg[6]
-            if self.GPS_fix_quality != '0':
+            # print(raw_msg)
+            if self.GPS_fix_quality == '0' or self.GPS_fix_quality == '\x00' or self.GPS_fix_quality == '\x000':
+                self.GPS_received = False
+                print('Bad GPS, no fix :(')
+            else:
                 self.GPS_raw_msg = raw_msg
                 self.GPS_Time = raw_msg[1]
                 self.state_est.lat = self.str_to_coord(raw_msg[2])
                 self.state_est.lon = -self.str_to_coord(raw_msg[4])
+                # print("lat lon:", self.state_est.lat, self.state_est.lon)
                 self.utm_x, self.utm_y, _, _ = utm.from_latlon(self.state_est.lat, self.state_est.lon)       
                 self.state_est.x = self.utm_x
                 self.state_est.y = self.utm_y
                 self.GPS_received = True
-            else:
-                self.GPS_received = False
-                print('Bad GPS, no fix :(')
 
     def str_to_coord(self, coord_str):
         per_index = coord_str.find('.')
         if per_index == 4:
             coord_str = '0' + coord_str #Add 0 to front
+        # print("Coord string: ", coord_str)
+        # print('Coord len: ', len(coord_str))
         deg = int(coord_str[:3])
         minutes = float(coord_str[3:])/60
         return deg + minutes
@@ -370,6 +394,7 @@ class ASV_robot:
                 self.depths = data[3:7]
                 self.bt_boat_beams = data[7:11]
                 self.ADCP_received = True
+                # print(self.bt_boat_beams)
 
         self.environment.stop_ping()
         self.adcp_f.close()
