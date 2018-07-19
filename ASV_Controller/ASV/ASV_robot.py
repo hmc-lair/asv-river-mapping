@@ -178,6 +178,12 @@ class ASV_robot:
 
     def point_track(self, des_point):
         '''Generate motor values given a point and current state'''
+
+        if self.motor_stop:
+            u_starboard = 0.0
+            u_port = 0.0
+            return
+
         angle_offset = math.atan2(des_point.y - self.state_est.y,
                                 des_point.x - self.state_est.x)
 
@@ -269,8 +275,12 @@ class ASV_robot:
             self.motor_stop  = True
         elif parsed_data[0] == "!STOP":
             self.motor_stop = True
+            print('Stop message received. Motors stopped.')
         elif parsed_data[0] == "!START":
             self.motor_stop = False
+            print('Start message received. Motors re-started.')
+        else:
+            print('Unknown command!')
         return data
 
     def report_to_shore(self):
