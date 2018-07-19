@@ -4,6 +4,7 @@ from ASV_graphics import *
 def main():
     # instantiate robot navigation classes
     controller = ASV_Controller()
+    controller.mode = 'SIM MODE'
     graphics = ASV_graphics(controller)
 
     # set time step size in seconds

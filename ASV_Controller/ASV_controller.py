@@ -12,9 +12,7 @@ import utm
 class ASV_Controller:
     
     def __init__(self):
-        # robot state
-        self.robot_state = ASV_state()
-
+        #self.mode = "HARDWARE MODE"
         self.mode = "SIM MODE"
         self.ASV_sim = None
 
@@ -23,6 +21,8 @@ class ASV_Controller:
         self.v_boat = 0.0
 
         if self.mode == "HARDWARE MODE":
+            self.sim_env = ASV_environment.ASV_sim_env()
+            self.robot = ASV_robot.ASV_robot(self.sim_env)
             # initialize xbee
             ser = serial.Serial("/dev/tty.usbserial-DN02Z6QY", 9600)
             ser.flush()
@@ -89,7 +89,7 @@ class ASV_Controller:
             parsed_data = data.split(',')
 
             if parsed_data[0] == '!DATA':
-                #print('Received GPS: ', data)
+                # print('Received GPS: ', data)
                 #TODO: update GPS data
                 self.robot.state_est.x = float(parsed_data[1])
                 self.robot.state_est.y = float(parsed_data[2])

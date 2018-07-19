@@ -81,8 +81,8 @@ class ASV_graphics:
         # ASV Control Panel
         self.control_title = Label(self.sidebar_frame, anchor='w', text='ASV Control Panel', font='Helvetica 14 bold').pack()
         # 1) Go to map location
-        self.control_wp = Label(self.sidebar_frame, anchor='w', width=30, text='Target Waypoint:\nLatitude: ???\nLongitude: ???')
-        self.control_wp.pack()
+        # self.control_wp = Label(self.sidebar_frame, anchor='w', width=30, text='Target Waypoint:\nLatitude: ???\nLongitude: ???')
+        # self.control_wp.pack()
         self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
         self.control_wp_dxdy.pack()
         self.goto = Button(self.sidebar_frame, anchor='w', text='Go to Map Location', command=self.on_toggle_goto)
@@ -107,9 +107,15 @@ class ASV_graphics:
         self.mission.pack()
 
         # Map Configuration
-        self.map_config = Label(self.sidebar_frame, anchor='w', text='Map Configuration', font='Helvetica 14 bold').pack()
+        self.map_config = Label(self.sidebar_frame, anchor='w', text='Configuration', font='Helvetica 14 bold').pack()
         self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
         self.origin.pack()
+        self.set_heading_offset = Button(self.sidebar_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset)
+        self.set_heading_offset.pack()
+        self.heading_offset_label = Label(self.sidebar_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
+        self.heading_offset = Entry(self.sidebar_frame, width=10)
+        self.heading_offset.insert(END, '0')
+        self.heading_offset.pack(side='right')
 
         # Load map image
         pilImg = Image.open(MAP_FILE)
@@ -202,10 +208,9 @@ class ASV_graphics:
             self.wp_list.delete(index)
             self.canvas.delete(selected_wp)
         else:
-            print('You are clicking on me!')
             x0, y0, _, _ = self.canvas.coords(selected_wp)
             lat, lon = self.pixel_to_laton(x0 + POINT_RADIUS, y0 + POINT_RADIUS)
-            print(lat, lon)
+            print('Added wp: ', lat, lon)
 
     def on_toggle_set_origin(self):
         if self.set_origin_mode:
@@ -294,6 +299,13 @@ class ASV_graphics:
         self.tk.destroy()
         self.quit_gui = True
 
+    def on_set_heading_offset(self):
+        heading_msg = "!HEADINGOFFSET, %f" % float(self.heading_offset.get())
+        print(heading_msg)
+        if self.controller.mode == 'HARDWARE MODE':
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, heading_msg.encode())
+
+
     ###########################################################################
     # Updating GUI
     ###########################################################################
@@ -320,8 +332,12 @@ class ASV_graphics:
         heading = self.controller.robot.state_est.theta
 
         # Convert local x y to lat lon
-        lat, lon = utm.to_latlon(x, y, 11, 'S')
-        self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(heading)
+        if x <= 0:
+            lat = 0.0
+            lon = 0.0
+        else:
+            lat, lon = utm.to_latlon(x, y, 11, 'S')
+        self.gps['text'] = 'Latitude: ' + str(round(lat, 5)) + '\nLongitude: ' + str(round(lon, 5)) + '\nHeading: ' + str(round(heading,2))
  
         # Convert UTM to graphing row and column
         img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x, y)
@@ -329,7 +345,7 @@ class ASV_graphics:
         col = int(img_col*MAP_WIDTH/IMAGE_WIDTH)
 
         # Update ASV location on map
-        self.draw_arrow(col, row, heading)
+        self.draw_arrow(col, row, heading*np.pi/180.)
         self.gps_local['text'] = 'x: ' + str(col - self.origin_coords[0]) + ', y: ' + str(-row + self.origin_coords[1])
 
         if self.goto_coords[0] != -1:
@@ -354,7 +370,7 @@ class ASV_graphics:
         x, y = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
         lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
         
-        self.control_wp['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon)
+        # self.control_wp['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon)
         self.target_GPS = (lat, lon)
         self.goto_coords = (x, y)
 
