@@ -346,7 +346,8 @@ class ASV_robot:
                 print('Bad GPS, no fix :(')
 
     def str_to_coord(self, coord_str):
-        if len(coord_str) == 12:
+        per_index = coord_str.find('.')
+        if per_index == 4:
             coord_str = '0' + coord_str #Add 0 to front
         deg = int(coord_str[:3])
         minutes = float(coord_str[3:])/60
