@@ -110,10 +110,12 @@ class ASV_graphics:
         self.map_config = Label(self.sidebar_frame, anchor='w', text='Configuration', font='Helvetica 14 bold').pack()
         self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
         self.origin.pack()
-        self.heading_offset = Label(self.sidebar_frame, anchor='w', text='Set Heading Offset (deg)').pack(side='left')
-        self.set_heading_offset = Entry(self.sidebar_frame, width=10)
-        self.set_heading_offset.insert(END, '0')
-        self.set_heading_offset.pack(side='right')
+        self.set_heading_offset = Button(self.sidebar_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset)
+        self.set_heading_offset.pack()
+        self.heading_offset_label = Label(self.sidebar_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
+        self.heading_offset = Entry(self.sidebar_frame, width=10)
+        self.heading_offset.insert(END, '0')
+        self.heading_offset.pack(side='right')
 
         # Load map image
         pilImg = Image.open(MAP_FILE)
@@ -206,10 +208,9 @@ class ASV_graphics:
             self.wp_list.delete(index)
             self.canvas.delete(selected_wp)
         else:
-            print('You are clicking on me!')
             x0, y0, _, _ = self.canvas.coords(selected_wp)
             lat, lon = self.pixel_to_laton(x0 + POINT_RADIUS, y0 + POINT_RADIUS)
-            print(lat, lon)
+            print('Added wp: ', lat, lon)
 
     def on_toggle_set_origin(self):
         if self.set_origin_mode:
@@ -297,6 +298,13 @@ class ASV_graphics:
             self.on_startstop()
         self.tk.destroy()
         self.quit_gui = True
+
+    def on_set_heading_offset(self):
+        heading_msg = "!HEADINGOFFSET, %f" % float(self.heading_offset.get())
+        print(heading_msg)
+        if self.controller.mode == 'HARDWARE MODE':
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, heading_msg.encode())
+
 
     ###########################################################################
     # Updating GUI
