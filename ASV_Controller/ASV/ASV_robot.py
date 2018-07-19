@@ -6,6 +6,7 @@ import utm
 import threading
 import time
 import struct
+import numpy.random
 
 class ASV_robot:
 
@@ -27,7 +28,7 @@ class ASV_robot:
         self.motor_stop = False
 
         # Controller Params
-        self.Kp = 1
+        self.Kp = 2
         self.Kd = 5
         self.Ki = 0.5
         self.last_ang_error = 0.0
@@ -36,7 +37,7 @@ class ASV_robot:
         self.rudder = 0.0
         self.R_motor = 0.0
         self.L_motor = 0.0
-        self.motor_threshold = 500
+        self.motor_threshold = 200
 
         # GPS Data and Coordinate
         self.GPS_fix_quality = 0
@@ -73,13 +74,17 @@ class ASV_robot:
 
         # Data logging
         time_stamp = datetime.datetime.now().replace(microsecond=0).strftime('%y-%m-%d %H.%M.%S')
-        self.gps_filename = 'Log/GPS_' + time_stamp + ".txt"
-        self.gps_f = open(self.gps_filename, 'w')
-        self.adcp_filename = 'Log/ADCP_' + time_stamp + ".bin"
-        self.adcp_f = open(self.adcp_filename, 'wb')
-
-        self.all_data_filename = 'Log/ALL_' + time_stamp + ".bin"
-        self.all_data_f = open(self.all_data_filename, 'wb')
+        
+        # Not putting things in separate file for now
+        # self.gps_filename = 'Log/GPS_' + time_stamp + ".txt"
+        # self.gps_f = open(self.gps_filename, 'w')
+        # self.adcp_filename = 'Log/ADCP_' + time_stamp + ".bin"
+        # self.adcp_f = open(self.adcp_filename, 'wb')
+        self.log_data = True
+        if self.log_data == True:
+            self.all_data_filename = 'Log/ALL_' + time_stamp + ".bin"
+            self.all_data_f = open(self.all_data_filename, 'wb')
+        # data to log: GPS, ADCP, heading
 
     def main_loop(self):
         '''main control loop for the ASV'''
@@ -105,12 +110,14 @@ class ASV_robot:
         # print("Dest X Y: ", self.cur_des_point.x, self.cur_des_point.y)
         # print("robot x y: ", self.state_est.x, self.state_est.y)
         # print("Heading: ", self.heading)
+        
         # Compute control signal
         strboard, port = self.point_track(self.cur_des_point)
 
         # 4. Update control signals
         self.update_control(0, 0)
-        # print("Right, Left: ", strboard, port)  
+        print("Left %f Right %f ", port, strboard)  
+
         if (strboard > port):
             print("turning left")
         elif (strboard < port):
@@ -127,7 +134,6 @@ class ASV_robot:
 
     def robot_setup(self):
         print('Setting up...')
-        # self.environment.start_ping()
 
         # Initialize GPS thread
         self.GPS_thread = threading.Thread(name = 'GPS Thread', target = self.update_GPS)
@@ -152,8 +158,10 @@ class ASV_robot:
                 self.environment.my_xbee.add_data_received_callback(self.xbee_callback)
 
         print('Starting main loop...')
+        
         # Begin threads
         self.GPS_thread.start()
+        # self.environment.start_ping()
         # self.ADCP_thread.start()
         self.mag_thread.start()
 
@@ -164,16 +172,17 @@ class ASV_robot:
 
     def update_control(self, L, R):
         '''Send command messages to the ASV'''
+    
+        # print("Starboard: %f Port: %f" % (L, R))
+        if self.motor_stop == True:
+            L = 0
+            R = 0
+
         left_command = '!G 1 %d' % L
         right_command = '!G 1 %d' % R
+
         self.environment.starboard_ser.write(left_command.encode() + b'\r\n')
         self.environment.port_ser.write(right_command.encode() + b'\r\n')
-        # print("Starboard: %f Port: %f" % (L, R))
-        # if self.motor_stop == True:
-        #     print("Port %f Starboard: %f" % (0, 0))
-        # else:
-        #     print("Port: %f Starboard: %f" % (L, R))
-        pass
 
     def update_waypoint(self):
         ''' iterate through the set of way points'''
@@ -193,11 +202,6 @@ class ASV_robot:
     def point_track(self, des_point):
         '''Generate motor values given a point and current state'''
 
-        if self.motor_stop:
-            u_starboard = 0.0
-            u_port = 0.0
-            return
-
         angle_offset = math.atan2(des_point.y - self.state_est.y,
                                 des_point.x - self.state_est.x)
 
@@ -213,38 +217,42 @@ class ASV_robot:
         else:
             # Simple heading PD control
             ang_error = self.angleDiff(angle_offset- self.state_est.theta)
-            uR = -self.Kp * ang_error - (ang_error - self.last_ang_error)/self.dt * self.Kd - (ang_error - self.last_ang_error)*self.dt*self.Ki
-            uL = self.Kp * ang_error + (ang_error - self.last_ang_error)/self.dt * self.Kd + (ang_error - self.last_ang_error)*self.dt*self.Ki
+            uL = -self.Kp * ang_error - (ang_error - self.last_ang_error)/self.dt * self.Kd - (ang_error - self.last_ang_error)*self.dt*self.Ki
+            uR = self.Kp * ang_error + (ang_error - self.last_ang_error)/self.dt * self.Kd + (ang_error - self.last_ang_error)*self.dt*self.Ki
             self.last_ang_error = ang_error
             
-            u_nom = 200
+            u_nom = (math.pi - abs(ang_error))/math.pi * 100
             # if (abs(ang_error) >= 0.2):
             #     u_nom = 0
             
-            uR = uR * 10
-            uL = uL * 10
+            uR = uR * 100
+            uL = uL * 100
 
+            print("ur %f, ul %f" % (uR, uL))
             # cap the distance
-            # u_nom = min(max(u_nom, 0), 100)
+            u_starboard = min(max(u_nom + uR, -self.motor_threshold), self.motor_threshold)
+            u_port = min(max(u_nom + uL, -self.motor_threshold), self.motor_threshold)
 
-            u_starboard = min(u_nom + uR, self.motor_threshold)
-            u_port = min(u_nom + uL, self.motor_threshold)
-
-        return u_port, u_starboard
+        return u_starboard, u_port
 
     def log_data(self):
         '''Log relevant data'''
         pass
 
     def localize_with_GPS(self):
-        '''state estimate with GPS'''
+        '''state estimate with GPS. For now it's just setting the x and y to 
+        the utm x and y value '''
         # 1. Update position with GPS
         self.state_est.x = self.utm_x
         self.state_est.y = self.utm_y
         self.GPS_received = False
 
     def localize_with_mag(self):
+        '''state estimate with magnetometer. For now it's setting the heading and 
+        angle data with the magnetometer '''
         self.state_est.theta = self.angleDiff((self.heading)/180 * math.pi)
+        self.state_est.roll = self.angleDiff(self.roll/180 * math.pi)
+        self.state_est.pitch = self.angleDiff(self.pitch/180 * math.pi)
         self.mag_received = False
 
     def predict(self):
@@ -338,11 +346,14 @@ class ASV_robot:
             else:
                 if self.environment.GPS_ser.in_waiting != 0:
                     data_str = self.environment.GPS_ser.readline()
-                    self.all_data_f.write(data_str)
-                    self.gps_f.write(data_str.decode())
+
+                    # Data Logging
+                    if self.log_data == True:
+                        self.all_data_f.write("$GPS,".encode() + data_str + b'###')
+                        # self.gps_f.write(data_str.decode())
                     self.process_GPS(data_str)
 
-        self.gps_f.close()
+        # self.gps_f.close()
         self.environment.GPS_ser.close()
 
     def process_GPS(self, data):
@@ -397,11 +408,14 @@ class ASV_robot:
                 # print(self.bt_boat_beams)
 
         self.environment.stop_ping()
-        self.adcp_f.close()
-        self.all_data_f.close()
+        # self.adcp_f.close()
+        if self.log_data == True:
+            self.all_data_f.close()
+        
         self.environment.ADCP_ser.close()
 
     def read_ensemble(self,verbose=False):
+        '''Read an ensemble of ADCP data. Then log it in a file'''
         header = self.environment.ADCP_ser.read(2)
         if header != b'\x7f\x7f':
             print('ERROR no header: ', header)
@@ -425,8 +439,15 @@ class ASV_robot:
 
         #read data to file
         all_data = b'\x7f\x7f' + num_bytes + data + checksum
-        self.adcp_f.write(all_data)
-        self.all_data_f.write(all_data)
+        # self.adcp_f.write(all_data)
+
+        current_state = [self.state_est.x, self.state_est.y, self.state_est.theta, self.state_est.roll, self.state_est.pitch]
+        current_state_str = "$STATE," + ",".join(map(str,current_state)) + "###"
+        
+        # Data Logging
+        if self.log_data  == True:
+            self.all_data_f.write(current_state_str.encode())
+            self.all_data_f.write("$ADCP,".encode() + all_data + b'###')
 
         return all_data
 
@@ -630,36 +651,61 @@ class ASV_sim(ASV_robot):
     def __init__(self, environment):
         super().__init__(environment)
         self.dt = 0.1
+        self.actual_state = ASV_state(0,0,0)
 
     def sim_loop(self):
-        uL, uR = self.point_track(self.cur_des_point)
-        # print("uL, uR", uL, uR)
-        self.update_state(self.state_est, uL, uR)
+        uR, uL = self.point_track(self.cur_des_point)
+        print("Left %f Right %f " % (uL, uR))  
+
+        self.estimate_state()
+        self.update_state(self.actual_state, uR, uL)
 
         self.update_waypoint()
+        time.sleep(0.1)
+        # self.gen_fake_data()
 
-    def update_motor(self):
-        pass
+    def estimate_state(self):
+        self.state_est = self.actual_state
 
-    def update_state(self, state, uL, uR):
+    def gen_fake_data(self):
+        fake_gps = '$GPGGA,194502.00,3526.9108198,N,11854.8502196,W,2,15,0.8,142.610,M,-29.620,M,7.0,0131*78'
+        gps_msg = b'$GPS,' + fake_gps.encode() + b'###'
+
+        f = open('sample_adcp.bin', 'rb')
+        fake_ADCP = f.readline()
+        adcp_msg = "$ADCP,".encode() + fake_ADCP + b'###'
+
+        fake_state = [self.state_est.x, self.state_est.y, self.state_est.theta, self.state_est.roll, self.state_est.pitch]
+        fake_state_str = "$STATE," + ",".join(map(str,fake_state)) + "\n" + '###'
+        fake_state_msg = fake_state_str.encode()
+        
+        if self.log_daa == True:
+            self.all_data_f.write(gps_msg)
+            self.all_data_f.write(adcp_msg)
+            self.all_data_f.write(fake_state_msg)
+        
+
+    def update_state(self, state, uR, uL):
         ''' for simulation '''
         # uL = 0
         # uR = 0
+        uR = uR/ 200 /self.dt
+        uL = uL/ 200 / self.dt
+
         b_l = 1 # sim linear drag
-        b_r = 1 # sim rotational drag 
-        I_zz = 60 # sim moment of inertia 
+        b_r = 0 # sim rotational drag 
+        I_zz = 6 # sim moment of inertia 
         m = 50 # sim mass
         robot_radius = 0.5
 
        # update state
         state.a = (uL + uR)/m - b_l/m * state.v
         state.ang_acc = -b_r / I_zz * state.omega + 1/I_zz * 2 * robot_radius * (uR - uL)
-
+        # print('damping :', -b_r / I_zz * state.omega)
         state.v = state.v + state.a * self.dt
         state.omega = state.omega + state.ang_acc * self.dt
         # print(state.omega)
         state.omega = min(max(state.omega, -1), 1)
-
         # update position
         state.x = state.x + state.v*math.cos(self.angleDiff(state.theta)) * self.dt
         state.y = state.y + state.v*math.sin(self.angleDiff(state.theta)) * self.dt

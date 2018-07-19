@@ -10,6 +10,10 @@ class ASV_state:
 		self.y = y
 		self.v = 0.0
 		self.a = 0.0
+
+		self.roll = 0.0
+		self.pitch = 0.0
+		
 		self.theta = theta
 		self.omega = 0.0
 		self.angle_acc = 0.0

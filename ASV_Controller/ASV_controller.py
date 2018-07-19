@@ -50,9 +50,10 @@ class ASV_Controller:
             self.robot = ASV_robot.ASV_sim(self.sim_env)
             
             # Specify robot location (50,50) in pixel coordinates
-            self.robot.state_est.x = 396168.0
-            self.robot.state_est.y = 3777912.0
-            self.robot.state_est.theta = math.pi/4
+            self.robot.actual_state.x = 396168.0
+            self.robot.actual_state.y = 3777912.0
+            self.robot.actual_state.theta = math.pi/4
+            self.robot.estimate_state()
 
     ###############################################################################
     # XBEE Setup Functions
