@@ -28,22 +28,10 @@ class ASV_environment:
         self.ADCP_ser = None
         self.mag_ser = None # magnetometer
 
-        self.disable_xbee = False
+        self.disable_xbee = True
 
         # Create serial port
         self.robot_mode = "HARDWARE MODE" # HARDWARE MODE
-        
-        # Setup Hardware
-        if (self.robot_mode == "HARDWARE MODE"):
-            self.setup_GPS()
-            self.setup_motors()
-            # self.setup_ADCP()
-            self.setup_magnetometer()
-            
-            if self.disable_xbee == True:
-                print('xbee disabled')
-            else:
-                self.dest_xbee = self.discover_xbee()
                 
 
 
@@ -54,6 +42,7 @@ class ASV_environment:
         self.GPS_ser.stop_bits = serial.STOPBITS_ONE
         self.GPS_ser.write("$JASC,GPGGA,1".encode() + b'\r\n')
         time.sleep(0.1)
+        self.GPS_ser.write("$JASC,GPVTG,20".encode() + b'\r\n')
         self.GPS_ser.flushInput()
 
     def setup_motors(self):

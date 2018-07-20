@@ -170,10 +170,12 @@ class ASV_graphics:
 
             #TODO: ADD COUNTDOWN BEFORE SENDING COMMANDS
             print('Starting countdown...')
-            for i in range(10):
-                print(str(10-i))
-                time.sleep(1)
+            # for i in range(10):
+            #     print(str(10-i))
+            #     time.sleep(1)
             if self.controller.mode == 'HARDWARE MODE':
+                print('Sending mission: ', mission_msg)
+                #self.controller.local_xbee.set_sync_ops_timeout(10)
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, mission_msg.encode())
             else:
                 xbee_msg = XBeeModel.message.XBeeMessage(mission_msg.encode(), None, None)

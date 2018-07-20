@@ -22,22 +22,22 @@ class ASV_robot:
         self.cur_des_point.set_state(1,1,1)
         self.way_points = [self.cur_des_point]
         self.des_reached = True
-        self.dist_threshold = 2
+        self.dist_threshold = 3
         self.dt = 0.01
 
         self.motor_stop = False
 
         # Controller Params
         self.Kp = 2
-        self.Kd = 5
-        self.Ki = 0.5
+        self.Kd = 0
+        self.Ki = 0
         self.last_ang_error = 0.0
 
         # robot commands
         self.rudder = 0.0
         self.R_motor = 0.0
         self.L_motor = 0.0
-        self.motor_threshold = 200
+        self.motor_threshold = 300
 
         # GPS Data and Coordinate
         self.GPS_fix_quality = 0
@@ -46,6 +46,8 @@ class ASV_robot:
         self.utm_x = 0
         self.utm_y = 0
         self.GPS_received = False
+        self.GPS_speed = 0
+        self.GPS_course = 0 # course over ground in degrees '0 - 359'
 
         self.beam_angle = 20
 
@@ -54,6 +56,7 @@ class ASV_robot:
         self.pitch = 0.0
         self.heading = 0.0
         self.mag_received = True
+        self.heading_offset = 0.0
 
         # ADCP Data
         self.ADCP_roll = 0.0
@@ -112,16 +115,17 @@ class ASV_robot:
         # print("Heading: ", self.heading)
         
         # Compute control signal
-        strboard, port = self.point_track(self.cur_des_point)
+        port, strboard = self.point_track(self.cur_des_point)
 
         # 4. Update control signals
-        self.update_control(0, 0)
-        print("Left %f Right %f ", port, strboard)  
+        self.update_control(port, strboard)
+        #self.update_control(-200, 300)
+        print("Left %f Right %f " % (-port, -strboard)) 
 
-        if (strboard > port):
-            print("turning left")
-        elif (strboard < port):
-            print("turning right")
+        # if (strboard > port):
+        #     print("turning left")
+        # elif (strboard < port):
+        #     print("turning right")
         # self.update_control(strboard, port)
 
         time.sleep(0.2)
@@ -134,6 +138,29 @@ class ASV_robot:
 
     def robot_setup(self):
         print('Setting up...')
+        self.environment.disable_xbee = True
+
+        # Setup Hardware
+        if (self.environment.robot_mode == "HARDWARE MODE"):
+            self.environment.setup_GPS()
+            self.environment.setup_motors()
+            self.environment.setup_ADCP()
+            self.environment.setup_magnetometer()
+            
+            if self.environment.disable_xbee == True:
+                print('xbee disabled')
+            else:
+                self.environment.dest_xbee = self.environment.discover_xbee()
+
+        # Create Xbee call back for communication
+        if self.environment.disable_xbee == True:
+            pass
+        else:
+            if self.environment.dest_xbee == None:
+                self.terminate = True
+                self.robot_shutdown()
+            else:
+                self.environment.my_xbee.add_data_received_callback(self.xbee_callback)
 
         # Initialize GPS thread
         self.GPS_thread = threading.Thread(name = 'GPS Thread', target = self.update_GPS)
@@ -146,16 +173,6 @@ class ASV_robot:
         # Initialize Magnetometer thread
         self.mag_thread = threading.Thread(name = 'ADCP Thread', target = self.update_mag)
         self.mag_thread.setDaemon(True)
-
-        # Create Xbee call back for communication
-        if self.environment.disable_xbee == True:
-            pass
-        else:
-            if self.environment.dest_xbee == None:
-                self.terminate = True
-                self.robot_shutdown()
-            else:
-                self.environment.my_xbee.add_data_received_callback(self.xbee_callback)
 
         print('Starting main loop...')
         
@@ -175,14 +192,17 @@ class ASV_robot:
     
         # print("Starboard: %f Port: %f" % (L, R))
         if self.motor_stop == True:
-            L = 0
-            R = 0
+            motor_L = 0
+            motor_R = 0
+        else:
+            motor_L = L
+            motor_R = R
 
-        left_command = '!G 1 %d' % L
-        right_command = '!G 1 %d' % R
+        left_command = '!G 1 %d' % motor_L
+        right_command = '!G 1 %d' % motor_R
 
-        self.environment.starboard_ser.write(left_command.encode() + b'\r\n')
-        self.environment.port_ser.write(right_command.encode() + b'\r\n')
+        self.environment.starboard_ser.write(right_command.encode() + b'\r\n')
+        self.environment.port_ser.write(left_command.encode() + b'\r\n')
 
     def update_waypoint(self):
         ''' iterate through the set of way points'''
@@ -190,6 +210,8 @@ class ASV_robot:
             if len(self.way_points) == 1:
                 self.cur_des_point = self.cur_des_point
             else:
+                if len(self.way_points) == 0:
+                    return
                 self.way_points = self.way_points[1:]
                 self.cur_des_point = self.way_points[0]
                 self.des_reached = False
@@ -209,31 +231,38 @@ class ASV_robot:
                 (des_point.x - self.state_est.x)**2)
 
         if distance <= self.dist_threshold or self.des_reached:
-            if self.des_reached == False: # Just print the first time destination reached
-                print('Destination reached! Turning off motors.')
+            # if self.des_reached == False: # Just print the first time destination reached
+            print('Destination reached! Turning off motors.')
+            self.stop_motor = True
             self.des_reached = True
             u_starboard = 0.0
             u_port = 0.0
         else:
             # Simple heading PD control
             ang_error = self.angleDiff(angle_offset- self.state_est.theta)
+
             uL = -self.Kp * ang_error - (ang_error - self.last_ang_error)/self.dt * self.Kd - (ang_error - self.last_ang_error)*self.dt*self.Ki
             uR = self.Kp * ang_error + (ang_error - self.last_ang_error)/self.dt * self.Kd + (ang_error - self.last_ang_error)*self.dt*self.Ki
             self.last_ang_error = ang_error
             
-            u_nom = (math.pi - abs(ang_error))/math.pi * 100
+            percent_reached = (math.pi - abs(ang_error))/math.pi
+            if percent_reached <= 0.7:
+                u_nom = 0
+            else:
+                u_nom = percent_reached * 150
             # if (abs(ang_error) >= 0.2):
             #     u_nom = 0
             
             uR = uR * 100
             uL = uL * 100
-
-            print("ur %f, ul %f" % (uR, uL))
+            print("angle error %f" % ang_error)
+            # print("u_nom %f" % u_nom)
+            # print("ur %f, ul %f" % (uR, uL))
             # cap the distance
-            u_starboard = min(max(u_nom + uR, -self.motor_threshold), self.motor_threshold)
-            u_port = min(max(u_nom + uL, -self.motor_threshold), self.motor_threshold)
+            u_starboard = -min(max(u_nom + uR, -self.motor_threshold), 200)
+            u_port = -min(max(u_nom + uL, -self.motor_threshold), 200)
 
-        return u_starboard, u_port
+        return u_port, u_starboard
 
     def log_data(self):
         '''Log relevant data'''
@@ -304,8 +333,12 @@ class ASV_robot:
         elif parsed_data[0] == "!START":
             self.motor_stop = False
             print('Start message received. Motors re-started.')
+        elif parsed_data[0] == "!HEADINGOFFSET":
+            self.heading_offset = float(parsed_data[1])
+            print('Heading message received. Angle offsetted')
         else:
             print('Unknown command!')
+
         return data
 
     def report_to_shore(self):
@@ -330,7 +363,7 @@ class ASV_robot:
                 data_str = self.environment.mag_ser.readline()
                 mag_data =data_str.decode().split(',')
                 # self.all_data_f.write(data_str)
-                self.heading = float(mag_data[1]) + 90
+                self.heading = float(mag_data[1]) + 90 + self.heading_offset
                 self.pitch = float(mag_data[2])
                 self.roll = float(mag_data[3])
                 self.mag_received = True
@@ -377,6 +410,18 @@ class ASV_robot:
                 self.state_est.x = self.utm_x
                 self.state_est.y = self.utm_y
                 self.GPS_received = True
+        
+        if raw_msg[0] == '$GPVTG':
+            if raw_msg[9] == 'N':
+                # not valid data
+                pass
+            else:
+                print(raw_msg)
+                self.GPS_speed = float(raw_msg[7]) # from km/hr to m/s
+                self.GPS_course = float(raw_msg[1]) # course over ground in degrees
+                print("Speed %f, Course %d" % (self.GPS_speed, self.GPS_course))
+
+
 
     def str_to_coord(self, coord_str):
         per_index = coord_str.find('.')
