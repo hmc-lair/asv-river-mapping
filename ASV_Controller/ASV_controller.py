@@ -12,8 +12,8 @@ import utm
 class ASV_Controller:
     
     def __init__(self):
-        #self.mode = "HARDWARE MODE"
-        self.mode = "HARDWARE MODE"
+        self.mode = "SIM MODE"
+        # self.mode = "HARDWARE MODE"
         self.ASV_sim = None
 
         # ADCP measuremens

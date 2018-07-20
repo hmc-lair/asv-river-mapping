@@ -47,7 +47,7 @@ class ASV_graphics:
 
         # GUI marker variables (labels on map)
         # Go to location
-        self.goto_coords = (-1,-1) #UTM! 
+        self.goto_coords = (-1,-1) #UTM! #TODO: CURRENTLY NOT CHANGED
         self.location_select_mode = False
         self.cur_pos_marker = None
         self.target_pos_marker = None
@@ -81,14 +81,12 @@ class ASV_graphics:
         # ASV Control Panel
         self.control_title = Label(self.sidebar_frame, anchor='w', text='ASV Control Panel', font='Helvetica 14 bold').pack()
         # 1) Go to map location
-        # self.control_wp = Label(self.sidebar_frame, anchor='w', width=30, text='Target Waypoint:\nLatitude: ???\nLongitude: ???')
-        # self.control_wp.pack()
         self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
         self.control_wp_dxdy.pack()
-        self.goto = Button(self.sidebar_frame, anchor='w', text='Go to Map Location', command=self.on_toggle_goto)
-        self.goto.pack()
         self.start_stop = Button(self.sidebar_frame, anchor='w', text='Start ASV', command=self.on_startstop)
         self.start_stop.pack()
+        self.clear_wps = Button(self.sidebar_frame, anchor='w', text='Clear All Waypoints', command=self.on_clear_wps).pack()
+
         # 2) Mission planning
         self.mission_title = Label(self.sidebar_frame, anchor='w', text='Mission Planning', font='Helvetica 14 bold').pack()
         scrollbar = Scrollbar(self.sidebar_frame)
@@ -114,7 +112,7 @@ class ASV_graphics:
         self.set_heading_offset.pack()
         self.heading_offset_label = Label(self.sidebar_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
         self.heading_offset = Entry(self.sidebar_frame, width=10)
-        self.heading_offset.insert(END, '0')
+        self.heading_offset.insert(END, '-20')
         self.heading_offset.pack(side='right')
 
         # Load map image
@@ -163,23 +161,25 @@ class ASV_graphics:
                 lat, lon = list(map(float, p.split(' ')[1].split(',')))
                 x, y,_, _ = utm.from_latlon(lat, lon)
                 self.mission_wps.append((x,y))
-            #Send mission waypoints to ASV and start mission
-            mission_msg = "!MISSION," 
-            for x, y in self.mission_wps:
-                mission_msg += "%f %f;" % (x, y)
 
-            #TODO: ADD COUNTDOWN BEFORE SENDING COMMANDS
-            print('Starting countdown...')
-            # for i in range(10):
-            #     print(str(10-i))
-            #     time.sleep(1)
             if self.controller.mode == 'HARDWARE MODE':
-                print('Sending mission: ', mission_msg)
-                #self.controller.local_xbee.set_sync_ops_timeout(10)
-                self.controller.local_xbee.send_data_async(self.controller.boat_xbee, mission_msg.encode())
+                for x, y in self.mission_wps:
+                    #Send waypoints one at a time
+                    way_point_msg = "!WP, %f, %f" % (x, y)
+                    self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
+                start_mission_msg = "!STARTMISSION"
+                self.controller.local_xbee.send_data_async(self.controller.boat_xbee, start_mission_msg.encode())
             else:
-                xbee_msg = XBeeModel.message.XBeeMessage(mission_msg.encode(), None, None)
+                for x, y in self.mission_wps:
+                    #Send waypoints one at a time
+                    way_point_msg = "!WP, %f, %f" % (x, y)
+                    xbee_msg = XBeeModel.message.XBeeMessage(way_point_msg.encode(), None, None)
+                    self.controller.robot.xbee_callback(xbee_msg)
+                start_mission_msg = "!STARTMISSION"
+                xbee_msg = XBeeModel.message.XBeeMessage(start_mission_msg.encode(), None, None)
                 self.controller.robot.xbee_callback(xbee_msg)
+
+
             print('Mission started!')
 
     def on_toggle_add_wps(self):
@@ -222,14 +222,6 @@ class ASV_graphics:
             self.set_origin_mode = True
             self.origin.configure(text='Select Map Origin...')
 
-    def on_toggle_goto(self):
-        if self.location_select_mode:
-            self.location_select_mode = False
-            self.goto.configure(text='Go to Map Location')
-        else:
-            self.location_select_mode = True
-            self.goto.configure(text='Select Map Location...')
-
     # Function to be called when map location clicked
     def on_location_click(self, event):
         #CHANGE MAP ORIGIN
@@ -253,25 +245,14 @@ class ASV_graphics:
             print ('Adding waypoint: ', lat, lon)
             self.wp_list.insert('end', self.w_name.cget("text") + str(lat) + ',' + str(lon))
 
-        #GO TO DESTINATION ON MAP
+    def on_clear_wps(self):
+        print('Clearing all waypoints...')
+        command_msg = "!CLEARWPS"
+        if self.controller.mode == 'HARDWARE MODE':
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
         else:
-            if self.location_select_mode == False:
-                return
-            if self.target_pos_marker == None:
-                x1, y1 = (event.x - POINT_RADIUS), (event.y - POINT_RADIUS)
-                x2, y2 = (event.x + POINT_RADIUS), (event.y + POINT_RADIUS)
-                self.target_pos_marker = self.canvas.create_oval(x1, y1, x2, y2, fill='red')
-            else:
-                old_pos = self.canvas.coords(self.target_pos_marker)
-                dx = event.x - (old_pos[0] + POINT_RADIUS)
-                dy = event.y - (old_pos[1] + POINT_RADIUS)
-                self.canvas.move(self.target_pos_marker, dx, dy)
-
-            self.go_to_location(event.x, event.y)
-
-            # Reset button
-            self.location_select_mode = False
-            self.goto.configure(text='Go to Map Location')
+            xbee_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
+            self.controller.robot.xbee_callback(xbee_msg)
 
     # Function to be called for start/stop
     def on_startstop(self):
@@ -280,6 +261,9 @@ class ASV_graphics:
             command_msg = "!START"
             if self.controller.mode == 'HARDWARE MODE':
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
+            else:
+                xbee_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
+                self.controller.robot.xbee_callback(xbee_msg)
             self.start_stop['text'] = 'Stop ASV'
             self.robot_stopped = False
         else:
@@ -287,6 +271,9 @@ class ASV_graphics:
             command_msg = "!STOP"
             if self.controller.mode == 'HARDWARE MODE':
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
+            else:
+                xbee_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
+                self.controller.robot.xbee_callback(xbee_msg)
             self.start_stop['text'] = 'Start ASV'
             self.robot_stopped = True
 
@@ -363,29 +350,6 @@ class ASV_graphics:
     ###########################################################################
     def set_origin(self, col, row):
         self.origin_coords = (col, row)
-
-    #Go to location specified by mouse click (pixel coords -> GPS)
-    def go_to_location(self, col, row):
-        img_col = int(col*IMAGE_WIDTH/MAP_WIDTH)
-        img_row = int(row*IMAGE_HEIGHT/MAP_HEIGHT)
-
-        x, y = gdal.ApplyGeoTransform(self.geo_trans, img_col, img_row)
-        lat, lon = utm.to_latlon(x, y, 11, 'S') #11, S is UTM zone for Kern River
-        
-        # self.control_wp['text'] = 'Target Waypoint:\nLatitude: '+ str(lat) + '\nLongitude: ' + str(lon)
-        self.target_GPS = (lat, lon)
-        self.goto_coords = (x, y)
-
-        #Send command to ASV to move to x, y
-        way_point_msg = "!WP, %f, %f" % (x, y)
-
-        # Sending data over
-        if self.controller.mode == 'HARDWARE MODE':
-            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
-            print('SENDING MESSAGE: ', way_point_msg)
-        else:
-            way_pt_msg = XBeeModel.message.XBeeMessage(way_point_msg.encode(), None, None)
-            self.controller.robot.xbee_callback(way_pt_msg)
 
     '''
     Return points to draw arrow at x, y. Points at theta (radians)

@@ -56,7 +56,7 @@ class ASV_robot:
         self.pitch = 0.0
         self.heading = 0.0
         self.mag_received = True
-        self.heading_offset = 0.0
+        self.heading_offset = -20.0 #magnetic vs. true north
 
         # ADCP Data
         self.ADCP_roll = 0.0
@@ -216,10 +216,13 @@ class ASV_robot:
                 self.cur_des_point = self.way_points[0]
                 self.des_reached = False
 
-    def add_way_points(self, way_points):
-        '''add way points'''
+    def add_way_point(self, way_point):
+        '''add way point'''
         #TODO Modify this later for multiple points
-        self.way_points = [way_points]
+        self.way_points.append(way_point)
+
+    def clear_way_points(self):
+        self.way_points = []
 
     def point_track(self, des_point):
         '''Generate motor values given a point and current state'''
@@ -232,7 +235,7 @@ class ASV_robot:
 
         if distance <= self.dist_threshold or self.des_reached:
             # if self.des_reached == False: # Just print the first time destination reached
-            print('Destination reached! Turning off motors.')
+            # print('Destination reached! Turning off motors.')
             self.stop_motor = True
             self.des_reached = True
             u_starboard = 0.0
@@ -255,7 +258,7 @@ class ASV_robot:
             
             uR = uR * 100
             uL = uL * 100
-            print("angle error %f" % ang_error)
+            # print("angle error %f" % ang_error)
             # print("u_nom %f" % u_nom)
             # print("ur %f, ul %f" % (uR, uL))
             # cap the distance
@@ -307,21 +310,20 @@ class ASV_robot:
     def xbee_callback(self, xbee_message):
         data = xbee_message.data.decode()
         parsed_data = data.split(',')
-        # print(data)
+        print(data)
         if parsed_data[0] == "!QUIT":
             self.terminate = True
             print("Stop message received. Terminating...")
+        elif parsed_data[0] == "!CLEARWPS":
+            self.clear_way_points()
+            self.des_reached = True
         elif parsed_data[0] == "!WP":
-            self.cur_des_point.x = float(parsed_data[1]) # way point in local x, y
-            self.cur_des_point.y = float(parsed_data[2]) 
-            self.add_way_points(self.cur_des_point)
+            wp = ASV_state()
+            wp.x = float(parsed_data[1]) # way point in local x, y
+            wp.y = float(parsed_data[2]) 
+            self.add_way_point(wp)
             self.des_reached = False
-        elif parsed_data[0] == "!MISSION":
-            self.way_points = []
-            for p in parsed_data[1].split(";")[:-1]:
-                x, y = list(map(float, p.split(" ")))
-                des_point = ASV_state(x, y)
-                self.way_points.append(des_point)
+        elif parsed_data[0] == "!STARTMISSION":
             self.cur_des_point = self.way_points[0]
             self.des_reached = False
         elif parsed_data[0] == "!ABORTMISSION":
@@ -700,7 +702,7 @@ class ASV_sim(ASV_robot):
 
     def sim_loop(self):
         uR, uL = self.point_track(self.cur_des_point)
-        print("Left %f Right %f " % (uL, uR))  
+        # print("Left %f Right %f " % (uL, uR))  
 
         self.estimate_state()
         self.update_state(self.actual_state, uR, uL)
