@@ -4,10 +4,6 @@ from ASV_graphics import *
 def main():
     # instantiate robot navigation classes
     controller = ASV_Controller()
-<<<<<<< HEAD
-=======
-    # controller.mode = 'HARDWARE MODE'
->>>>>>> 5b3a49c3133346abc50de538a8b1d41f00adfd8a
     graphics = ASV_graphics(controller)
 
     # set time step size in seconds
