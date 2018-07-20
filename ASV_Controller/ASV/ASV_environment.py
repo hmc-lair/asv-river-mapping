@@ -40,7 +40,7 @@ class ASV_environment:
         self.GPS_ser.baudrate = 19200
         self.GPS_ser.parity = serial.PARITY_NONE
         self.GPS_ser.stop_bits = serial.STOPBITS_ONE
-        self.GPS_ser.write("$JASC,GPGGA,1".encode() + b'\r\n')
+        self.GPS_ser.write("$JASC,GPGGA,20".encode() + b'\r\n')
         time.sleep(0.1)
         self.GPS_ser.write("$JASC,GPVTG,20".encode() + b'\r\n')
         self.GPS_ser.flushInput()
