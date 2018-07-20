@@ -380,6 +380,7 @@ class ASV_graphics:
         # Sending data over
         if self.controller.mode == 'HARDWARE MODE':
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
+            print('SENDING MESSAGE: ', way_point_msg)
         else:
             way_pt_msg = XBeeModel.message.XBeeMessage(way_point_msg.encode(), None, None)
             self.controller.robot.xbee_callback(way_pt_msg)
