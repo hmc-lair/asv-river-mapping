@@ -166,6 +166,7 @@ class ASV_graphics:
                 for x, y in self.mission_wps:
                     #Send waypoints one at a time
                     way_point_msg = "!WP, %f, %f" % (x, y)
+                    print(way_point_msg)
                     self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
                 start_mission_msg = "!STARTMISSION"
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, start_mission_msg.encode())
@@ -326,7 +327,7 @@ class ASV_graphics:
             lon = 0.0
         else:
             lat, lon = utm.to_latlon(x, y, 11, 'S')
-        self.gps['text'] = 'Latitude: ' + str(round(lat, 5)) + '\nLongitude: ' + str(round(lon, 5)) + '\nHeading: ' + str(round(heading,2))
+        self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(round(heading,2))
  
         # Convert UTM to graphing row and column
         img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x, y)
