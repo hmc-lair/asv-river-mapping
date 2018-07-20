@@ -120,7 +120,7 @@ class ASV_robot:
         # 4. Update control signals
         self.update_control(port, strboard)
         #self.update_control(-200, 300)
-        print("Left %f Right %f " % (-port, -strboard)) 
+        #print("Left %f Right %f " % (-port, -strboard)) 
 
         # if (strboard > port):
         #     print("turning left")
@@ -138,7 +138,7 @@ class ASV_robot:
 
     def robot_setup(self):
         print('Setting up...')
-        self.environment.disable_xbee = True
+        self.environment.disable_xbee = False
 
         # Setup Hardware
         if (self.environment.robot_mode == "HARDWARE MODE"):
@@ -243,7 +243,7 @@ class ASV_robot:
         else:
             # Simple heading PD control
             ang_error = self.angleDiff(angle_offset- self.state_est.theta)
-
+            #print('ang_error', ang_error)
             uL = -self.Kp * ang_error - (ang_error - self.last_ang_error)/self.dt * self.Kd - (ang_error - self.last_ang_error)*self.dt*self.Ki
             uR = self.Kp * ang_error + (ang_error - self.last_ang_error)/self.dt * self.Kd + (ang_error - self.last_ang_error)*self.dt*self.Ki
             self.last_ang_error = ang_error
@@ -398,11 +398,15 @@ class ASV_robot:
         raw_msg = data_decoded.split(',')
         if raw_msg[0] == '$GPGGA':
             self.GPS_fix_quality = raw_msg[6]
-            # print(raw_msg)
+            #print(raw_msg)
             if self.GPS_fix_quality == '0' or self.GPS_fix_quality == '\x00' or self.GPS_fix_quality == '\x000':
                 self.GPS_received = False
                 print('Bad GPS, no fix :(')
             else:
+                if "\x00" in raw_msg[2]:
+                    return
+                if "\x00" in raw_msg[4]:
+                    return
                 self.GPS_raw_msg = raw_msg
                 self.GPS_Time = raw_msg[1]
                 self.state_est.lat = self.str_to_coord(raw_msg[2])
@@ -412,14 +416,19 @@ class ASV_robot:
                 self.state_est.x = self.utm_x
                 self.state_est.y = self.utm_y
                 self.GPS_received = True
-        
-        if raw_msg[0] == '$GPVTG':
-            if raw_msg[9] == 'N':
+                print('GPS: ', self.state_est.x, self.state_est.y)
+        elif raw_msg[0] == '$GPVTG':
+            if raw_msg[9] == 'N' or len(raw_msg) < 9:
                 # not valid data
                 pass
             else:
-                print(raw_msg)
-                self.GPS_speed = float(raw_msg[7]) # from km/hr to m/s
+                # print(raw_msg)
+                if "\x00" in raw_msg[7]:
+                    print("cutting extra char")
+                    raw_msg[7] = raw_msg[7][1:]
+                if "\x00" in raw_msg[1]:
+                    raw_msg[1] = raw_msg[1][1:]
+                self.GPS_speed = float(raw_msg[7])*1000/3600 # from km/hr to m/s
                 self.GPS_course = float(raw_msg[1]) # course over ground in degrees
                 print("Speed %f, Course %d" % (self.GPS_speed, self.GPS_course))
 
