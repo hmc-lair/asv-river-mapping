@@ -20,7 +20,7 @@ class ASV_robot:
         # Way points to navigate
         self.cur_des_point = ASV_state()
         self.cur_des_point.set_state(1,1,1)
-        self.way_points = [self.cur_des_point]
+        self.way_points = []
         self.des_reached = True
         self.dist_threshold = 3
         self.dt = 0.01
@@ -218,7 +218,6 @@ class ASV_robot:
 
     def add_way_point(self, way_point):
         '''add way point'''
-        #TODO Modify this later for multiple points
         self.way_points.append(way_point)
 
     def clear_way_points(self):
