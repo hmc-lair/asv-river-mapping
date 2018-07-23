@@ -227,6 +227,8 @@ class ASV_graphics:
             self.wp_list.delete(index)
             self.canvas.delete(selected_wp)
             self.canvas.delete(selected_wp_label)
+            for i in range(len(self.wp_labels)): #update wp ordering
+                self.canvas.itemconfig(self.wp_labels[i], text=str(i+1))
         else:
             x0, y0, _, _ = self.canvas.coords(selected_wp)
             lat, lon = self.pixel_to_laton(x0 + POINT_RADIUS, y0 + POINT_RADIUS)
