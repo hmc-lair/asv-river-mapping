@@ -52,11 +52,17 @@ class ASV_graphics:
         self.location_select_mode = False
         self.cur_pos_marker = None
         self.target_pos_marker = None
+
         # Mission planning
         self.add_wps_mode = False
         self.remove_wps_mode = False
         self.running_mission_mode = False
+        self.set_border_mode = False
         self.wp_markers = []
+        self.wp_labels = []
+
+        self.border_markers = []
+
         # Origin setting
         self.origin_coords = (0,0) #pixel coords
         self.set_origin_mode = False
@@ -82,8 +88,8 @@ class ASV_graphics:
         # ASV Control Panel
         self.control_title = Label(self.sidebar_frame, anchor='w', text='ASV Control Panel', font='Helvetica 14 bold').pack()
         # 1) Go to map location
-        self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
-        self.control_wp_dxdy.pack()
+        # self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
+        # self.control_wp_dxdy.pack()
         self.start_stop = Button(self.sidebar_frame, anchor='w', text='Start ASV', command=self.on_startstop)
         self.start_stop.pack()
         self.clear_wps = Button(self.sidebar_frame, anchor='w', text='Clear All Waypoints', command=self.on_clear_wps).pack()
@@ -92,29 +98,38 @@ class ASV_graphics:
         self.mission_title = Label(self.sidebar_frame, anchor='w', text='Mission Planning', font='Helvetica 14 bold').pack()
         scrollbar = Scrollbar(self.sidebar_frame)
         scrollbar.pack(side='right')
-        self.w_name = Label(self.sidebar_frame, text='WP: ')#some label
+        self.w_name = Label(self.sidebar_frame, text='')
         self.wp_list = Listbox(self.sidebar_frame, width=30, yscrollcommand=scrollbar.set)
         self.wp_list.pack()
         self.wp_list.bind('<<ListboxSelect>>', self.on_waypoint_selection)
         scrollbar.config(command = self.wp_list.yview)
 
+        self.mission_file_frame = Frame(self.sidebar_frame)
+        self.mission_file_frame.pack()
+        self.load_mission = Button(self.mission_file_frame, anchor='w', text='Load Mission File', command=self.on_load_mission).pack(side='left')
+        self.save_mission = Button(self.mission_file_frame, anchor='w', text='Save Mission', command=self.on_save_mission).pack(side='right')
+
         self.mission_add_wps = Button(self.sidebar_frame, anchor='w', text='Add Waypoints', command=self.on_toggle_add_wps)
         self.mission_add_wps.pack()
         self.mission_remove_wps = Button(self.sidebar_frame, anchor='w', text='Remove Waypoints', command=self.on_toggle_remove_wps)
         self.mission_remove_wps.pack()
+
         self.mission = Button(self.sidebar_frame, anchor='w', text='Start Mission', command=self.on_toggle_mission)
         self.mission.pack()
 
         # Map Configuration
         self.map_config = Label(self.sidebar_frame, anchor='w', text='Configuration', font='Helvetica 14 bold').pack()
-        self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
-        self.origin.pack()
-        self.set_heading_offset = Button(self.sidebar_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset)
-        self.set_heading_offset.pack()
-        self.heading_offset_label = Label(self.sidebar_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
-        self.heading_offset = Entry(self.sidebar_frame, width=10)
-        self.heading_offset.insert(END, '-20')
-        self.heading_offset.pack(side='right')
+        # self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
+        # self.origin.pack()
+        # self.set_heading_offset = Button(self.sidebar_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset)
+        # self.set_heading_offset.pack()
+        # self.heading_offset_label = Label(self.sidebar_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
+        # self.heading_offset = Entry(self.sidebar_frame, width=10)
+        # self.heading_offset.insert(END, '-20')
+        # self.heading_offset.pack(side='right')
+        self.border = Button(self.sidebar_frame, anchor='w', text='Trace Border', command=self.on_toggle_border)
+        self.border.pack()
+        self.clear_border = Button(self.sidebar_frame, anchor='w', text='Clear Border', command=self.on_clear_border).pack()
 
         # Load map image
         pilImg = Image.open(MAP_FILE)
@@ -133,6 +148,7 @@ class ASV_graphics:
     ###########################################################################
     # Location Conversions
     ###########################################################################
+    
     def pixel_to_laton(self, col, row):
         img_col = int(col*IMAGE_WIDTH/MAP_WIDTH)
         img_row = int(row*IMAGE_HEIGHT/MAP_HEIGHT)
@@ -140,8 +156,15 @@ class ASV_graphics:
         lat, lon = utm.to_latlon(x, y, 11, 'S')
         return lat, lon
 
+    def latlon_to_pixel(self, lat, lon):
+        x, y, _,_  = utm.from_latlon(lat, lon)
+        img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x, y)
+        row = int(img_row*MAP_HEIGHT/IMAGE_HEIGHT)
+        col = int(img_col*MAP_WIDTH/IMAGE_WIDTH)
+        return row, col
+
     ###########################################################################
-    # Callbacks
+    # Mission Callbacks
     ###########################################################################
 
     def on_toggle_mission(self):
@@ -174,6 +197,7 @@ class ASV_graphics:
                 for x, y in self.mission_wps:
                     #Send waypoints one at a time
                     way_point_msg = "!WP, %f, %f" % (x, y)
+                    print(way_point_msg)
                     self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
                 
                 start_mission_msg = "!STARTMISSION"
@@ -187,8 +211,6 @@ class ASV_graphics:
                 start_mission_msg = "!STARTMISSION"
                 xbee_msg = XBeeModel.message.XBeeMessage(start_mission_msg.encode(), None, None)
                 self.controller.robot.xbee_callback(xbee_msg)
-
-
             print('Mission started!')
 
     def on_toggle_add_wps(self):
@@ -213,15 +235,66 @@ class ASV_graphics:
         selection = self.wp_list.curselection()
         index = selection[0]
         selected_wp = self.wp_markers[index]
+        selected_wp_label = self.wp_labels[index]
         if self.remove_wps_mode:
             print('Removing wp...')
             self.wp_markers.pop(index)
+            self.wp_labels.pop(index)
             self.wp_list.delete(index)
             self.canvas.delete(selected_wp)
+            self.canvas.delete(selected_wp_label)
+            for i in range(len(self.wp_labels)): #update wp ordering
+                self.canvas.itemconfig(self.wp_labels[i], text=str(i+1))
         else:
             x0, y0, _, _ = self.canvas.coords(selected_wp)
             lat, lon = self.pixel_to_laton(x0 + POINT_RADIUS, y0 + POINT_RADIUS)
-            print('Added wp: ', lat, lon)
+            print('wp: ', lat, lon)
+
+    def on_clear_wps(self):
+        print('Clearing all waypoints...')
+        command_msg = "!CLEARWPS"
+        if self.controller.mode == 'HARDWARE MODE':
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
+        else:
+            xbee_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
+            self.controller.robot.xbee_callback(xbee_msg)
+
+    def on_load_mission(self):
+        mission_file = input('Mission file name? ') #example: sample_mission (file @ Missions/sample_mission.csv)
+        coords = []
+        with open('Missions/' + mission_file + '.csv', 'r') as f:
+            for line in f.readlines():
+                if line[-1] == '\n':
+                    line = line[:-1]
+                coords.append(list(map(float,line.split(','))))
+
+        #Clear list and add waypoints
+        if self.wp_list.index('end') != 0:
+            self.wp_list.delete(0, 'end')
+            for marker in self.wp_markers:
+                self.canvas.delete(marker)
+            for label in self.wp_labels:
+                self.canvas.delete(label)
+            self.wp_markers = []
+            self.wp_labels = []
+        for lat, lon in coords:
+            row, col = self.latlon_to_pixel(lat, lon)
+            self.wp_markers.append(self.draw_circle(col, row))
+            self.wp_labels.append(self.draw_label(col, row))
+            self.wp_list.insert('end', self.w_name.cget('text') + str(lat) + ',' + str(lon))
+
+    def on_save_mission(self):
+        mission_file = input('Mission file name? ')
+        print(mission_file)
+        #TODO: check if mission already in directory. if so ask if want to overwrite!
+        with open('Missions/' + mission_file + '.csv', 'w') as f:
+            for wp in self.wp_list.get(0, 'end'):
+                f.write(wp + '\n')
+
+
+    ###########################################################################
+    # Miscellaneous Callbacks
+    ###########################################################################
 
     def on_toggle_set_origin(self):
         if self.set_origin_mode:
@@ -230,6 +303,19 @@ class ASV_graphics:
         else:
             self.set_origin_mode = True
             self.origin.configure(text='Select Map Origin...')
+
+    def on_toggle_border(self):
+        if self.set_border_mode:
+            self.set_border_mode = False
+            self.border.configure(text='Trace Border')
+        else:
+            self.set_border_mode = True
+            self.border.configure(text='Done Tracing Border')
+
+    def on_clear_border(self):
+        for point in self.border_markers:
+            self.canvas.delete(point)
+        self.border_markers = []
 
     # Function to be called when map location clicked
     def on_location_click(self, event):
@@ -246,22 +332,11 @@ class ASV_graphics:
 
         #ADDING WAYPOINTS TO MISSION
         elif self.add_wps_mode:
-            x1, y1 = (event.x - POINT_RADIUS), (event.y - POINT_RADIUS)
-            x2, y2 = (event.x + POINT_RADIUS), (event.y + POINT_RADIUS)
-            self.wp_markers.append(self.canvas.create_oval(x1, y1, x2, y2, fill='blue'))
-
+            self.wp_markers.append(self.draw_circle(event.x, event.y))
+            self.wp_labels.append(self.draw_label(event.x, event.y))
             lat, lon = self.pixel_to_laton(event.x, event.y)
             print ('Adding waypoint: ', lat, lon)
-            self.wp_list.insert('end', self.w_name.cget("text") + str(lat) + ',' + str(lon))
-
-    def on_clear_wps(self):
-        print('Clearing all waypoints...')
-        command_msg = "!CLEARWPS"
-        if self.controller.mode == 'HARDWARE MODE':
-            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
-        else:
-            xbee_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
-            self.controller.robot.xbee_callback(xbee_msg)
+            self.wp_list.insert('end', self.w_name.cget('text') + str(lat) + ',' + str(lon))
 
     # Function to be called for start/stop
     def on_startstop(self):
@@ -303,7 +378,6 @@ class ASV_graphics:
         if self.controller.mode == 'HARDWARE MODE':
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, heading_msg.encode())
 
-
     ###########################################################################
     # Updating GUI
     ###########################################################################
@@ -339,7 +413,7 @@ class ASV_graphics:
             lon = 0.0
         else:
             lat, lon = utm.to_latlon(x, y, 11, 'S')
-        self.gps['text'] = 'Latitude: ' + str(round(lat, 5)) + '\nLongitude: ' + str(round(lon, 5)) + '\nHeading: ' + str(round(heading,2))
+        self.gps['text'] = 'Latitude: ' + str(lat) + '\nLongitude: ' + str(lon) + '\nHeading: ' + str(round(heading,2))
  
         # Convert UTM to graphing row and column
         img_col, img_row = gdal.ApplyGeoTransform(self.inv_trans, x, y)
@@ -353,16 +427,32 @@ class ASV_graphics:
         if self.goto_coords[0] != -1:
             self.control_wp_dxdy['text'] = 'dx: ' + str(int(self.goto_coords[0]-x)) + ', dy: ' + str(int(self.goto_coords[1]-y))
 
+        # Add border
+        if self.set_border_mode:
+            self.border_markers.append(self.draw_circle(col, row, border=True)) #TODO: make this more elegant?
+
     def update_ADCP(self):
         depth = self.controller.depth
         current = self.controller.v_boat
         self.adcp_data['text'] = 'Water depth: ' + str(depth) + "\nCurrent speed: " + str(current)
 
     ###########################################################################
-    # ASV Commands
+    # Helper Functions
     ###########################################################################
+    
     def set_origin(self, col, row):
         self.origin_coords = (col, row)
+
+    def draw_circle(self, x, y, border=False):
+        x1, y1 = (x - POINT_RADIUS), (y - POINT_RADIUS)
+        x2, y2 = (x + POINT_RADIUS), (y + POINT_RADIUS)
+        color = 'red'
+        if border:
+            color = 'orange'
+        return self.canvas.create_oval(x1, y1, x2, y2, fill=color)
+
+    def draw_label(self, x, y):
+        return self.canvas.create_text(x + 2*POINT_RADIUS, y - 2*POINT_RADIUS, text=str(self.wp_list.index('end')+1))
 
     '''
     Return points to draw arrow at x, y. Points at theta (radians)
