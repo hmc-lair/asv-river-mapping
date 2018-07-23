@@ -51,12 +51,16 @@ class ASV_graphics:
         self.location_select_mode = False
         self.cur_pos_marker = None
         self.target_pos_marker = None
+
         # Mission planning
         self.add_wps_mode = False
         self.remove_wps_mode = False
         self.running_mission_mode = False
+        self.set_border_mode = False
         self.wp_markers = []
         self.wp_labels = []
+
+        self.border_markers = []
 
         # Origin setting
         self.origin_coords = (0,0) #pixel coords
@@ -83,8 +87,8 @@ class ASV_graphics:
         # ASV Control Panel
         self.control_title = Label(self.sidebar_frame, anchor='w', text='ASV Control Panel', font='Helvetica 14 bold').pack()
         # 1) Go to map location
-        self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
-        self.control_wp_dxdy.pack()
+        # self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
+        # self.control_wp_dxdy.pack()
         self.start_stop = Button(self.sidebar_frame, anchor='w', text='Start ASV', command=self.on_startstop)
         self.start_stop.pack()
         self.clear_wps = Button(self.sidebar_frame, anchor='w', text='Clear All Waypoints', command=self.on_clear_wps).pack()
@@ -102,7 +106,7 @@ class ASV_graphics:
         self.mission_file_frame = Frame(self.sidebar_frame)
         self.mission_file_frame.pack()
         self.load_mission = Button(self.mission_file_frame, anchor='w', text='Load Mission File', command=self.on_load_mission).pack(side='left')
-        self.save_mission = Button(self.mission_file_frame, anchor='w', text='Save Mission To File', command=self.on_save_mission).pack(side='right')
+        self.save_mission = Button(self.mission_file_frame, anchor='w', text='Save Mission', command=self.on_save_mission).pack(side='right')
 
         self.mission_add_wps = Button(self.sidebar_frame, anchor='w', text='Add Waypoints', command=self.on_toggle_add_wps)
         self.mission_add_wps.pack()
@@ -114,14 +118,17 @@ class ASV_graphics:
 
         # Map Configuration
         self.map_config = Label(self.sidebar_frame, anchor='w', text='Configuration', font='Helvetica 14 bold').pack()
-        self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
-        self.origin.pack()
-        self.set_heading_offset = Button(self.sidebar_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset)
-        self.set_heading_offset.pack()
-        self.heading_offset_label = Label(self.sidebar_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
-        self.heading_offset = Entry(self.sidebar_frame, width=10)
-        self.heading_offset.insert(END, '-20')
-        self.heading_offset.pack(side='right')
+        # self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
+        # self.origin.pack()
+        # self.set_heading_offset = Button(self.sidebar_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset)
+        # self.set_heading_offset.pack()
+        # self.heading_offset_label = Label(self.sidebar_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
+        # self.heading_offset = Entry(self.sidebar_frame, width=10)
+        # self.heading_offset.insert(END, '-20')
+        # self.heading_offset.pack(side='right')
+        self.border = Button(self.sidebar_frame, anchor='w', text='Trace Border', command=self.on_toggle_border)
+        self.border.pack()
+        self.clear_border = Button(self.sidebar_frame, anchor='w', text='Clear Border', command=self.on_clear_border).pack()
 
         # Load map image
         pilImg = Image.open(MAP_FILE)
@@ -288,6 +295,19 @@ class ASV_graphics:
             self.set_origin_mode = True
             self.origin.configure(text='Select Map Origin...')
 
+    def on_toggle_border(self):
+        if self.set_border_mode:
+            self.set_border_mode = False
+            self.border.configure(text='Trace Border')
+        else:
+            self.set_border_mode = True
+            self.border.configure(text='Done Tracing Border')
+
+    def on_clear_border(self):
+        for point in self.border_markers:
+            self.canvas.delete(point)
+        self.border_markers = []
+
     # Function to be called when map location clicked
     def on_location_click(self, event):
         #CHANGE MAP ORIGIN
@@ -349,7 +369,6 @@ class ASV_graphics:
         if self.controller.mode == 'HARDWARE MODE':
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, heading_msg.encode())
 
-
     ###########################################################################
     # Updating GUI
     ###########################################################################
@@ -395,6 +414,10 @@ class ASV_graphics:
         if self.goto_coords[0] != -1:
             self.control_wp_dxdy['text'] = 'dx: ' + str(int(self.goto_coords[0]-x)) + ', dy: ' + str(int(self.goto_coords[1]-y))
 
+        # Add border
+        if self.set_border_mode:
+            self.border_markers.append(self.draw_circle(col, row, border=True)) #TODO: make this more elegant?
+
     def update_ADCP(self):
         depth = self.controller.depth
         current = self.controller.v_boat
@@ -407,10 +430,13 @@ class ASV_graphics:
     def set_origin(self, col, row):
         self.origin_coords = (col, row)
 
-    def draw_circle(self, x, y):
+    def draw_circle(self, x, y, border=False):
         x1, y1 = (x - POINT_RADIUS), (y - POINT_RADIUS)
         x2, y2 = (x + POINT_RADIUS), (y + POINT_RADIUS)
-        return self.canvas.create_oval(x1, y1, x2, y2, fill='red')
+        color = 'red'
+        if border:
+            color = 'orange'
+        return self.canvas.create_oval(x1, y1, x2, y2, fill=color)
 
     def draw_label(self, x, y):
         return self.canvas.create_text(x + 2*POINT_RADIUS, y - 2*POINT_RADIUS, text=str(self.wp_list.index('end')+1))
