@@ -52,7 +52,7 @@ class ASV_Controller:
             # Specify robot location (50,50) in pixel coordinates
             self.robot.actual_state.x = 396168.0
             self.robot.actual_state.y = 3777912.0
-            self.robot.actual_state.theta = math.pi/4
+            self.robot.actual_state.theta = 0
             self.robot.estimate_state()
 
     ###############################################################################

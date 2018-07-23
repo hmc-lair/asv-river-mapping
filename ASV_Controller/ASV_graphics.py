@@ -5,6 +5,7 @@ import utm
 import time
 import digi.xbee.models as XBeeModel
 import numpy as np
+import math
 
 #Milikan pond is 170x110
 #Cast is 
@@ -145,11 +146,18 @@ class ASV_graphics:
 
     def on_toggle_mission(self):
         if self.running_mission_mode:
+            # sending a series of way point to the robot
             self.running_mission_mode = False
             self.mission.configure(text='Start Mission')
+            
             if self.controller.mode == 'HARDWARE MODE':
                 msg = '!ABORTMISSION'
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, msg.encode())
+            elif self.controller.mode == "SIM MODE":
+                msg = '!ABORTMISSION'
+                xbee_msg= XBeeModel.message.XBeeMessage(msg.encode(), None, None)
+                self.controller.robot.xbee_callback(xbee_msg)
+           
             print('Mission aborted!')
         else:
             print('Starting mission...')
@@ -167,6 +175,7 @@ class ASV_graphics:
                     #Send waypoints one at a time
                     way_point_msg = "!WP, %f, %f" % (x, y)
                     self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
+                
                 start_mission_msg = "!STARTMISSION"
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, start_mission_msg.encode())
             else:
@@ -318,7 +327,11 @@ class ASV_graphics:
         '''Get local x, y coordinate from robot. Then convert to utm for graphing'''
         x = self.controller.robot.state_est.x
         y = self.controller.robot.state_est.y
-        heading = self.controller.robot.state_est.theta
+
+        if self.controller.mode == "SIM MODE":
+            heading = self.controller.robot.state_est.theta/ math.pi * 180
+        else:
+            heading = self.controller.robot.state_est.theta
 
         # Convert local x y to lat lon
         if x <= 0:
