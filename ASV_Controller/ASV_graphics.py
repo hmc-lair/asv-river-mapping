@@ -180,8 +180,9 @@ class ASV_graphics:
             self.mission.configure(text='Abort Mission')
 
             self.mission_wps = []
+            print(self.wp_list.get(0, END))
             for p in self.wp_list.get(0, END):
-                lat, lon = list(map(float, p.split(' ')[1].split(',')))
+                lat, lon = list(map(float, p.split(',')))
                 x, y,_, _ = utm.from_latlon(lat, lon)
                 self.mission_wps.append((x,y))
 
