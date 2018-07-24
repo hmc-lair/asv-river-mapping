@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import struct
 def main():
 	f = open('afternoon_test-7-19.bin', 'rb')
 	all_data = b''
@@ -60,7 +61,7 @@ def read_ensemble(data):
     pings_per_ensemble = int.from_bytes(all_data[fixed_offset+10: fixed_offset+12], byteorder='little')
     depth_cell_length = int.from_bytes(all_data[fixed_offset+12: fixed_offset+14], byteorder='little') # cm
     coord_transform = all_data[fixed_offset+25]
-    print('Coord Transform: ', coord_transform)
+    # print('Coord Transform: ', coord_transform)
     # print('Depth cell length', depth_cell_length)
 
     # VARIABLE LEADER
@@ -152,7 +153,7 @@ def read_ensemble(data):
     # print('Vertical beam range:', vb_range)
     return_offset = 0
     return_data = [return_offset, roll, pitch, heading, depth_cell_length, 
-        relative_velocities, bt_velocities, time_stamp]
+        relative_velocities, bt_ranges, bt_velocities, time_stamp]
 
     return return_data
 
