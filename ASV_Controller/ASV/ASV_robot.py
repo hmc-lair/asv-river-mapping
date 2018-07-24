@@ -28,10 +28,13 @@ class ASV_robot:
         self.motor_stop = False
 
         # Controller Params
-        self.Kp = 2
+        self.Kp = 10
         self.Kd = 0
-        self.Ki = 0
+        self.Ki = 1
+        self.last_uL = 0.0
+        self.last_uR = 0.0
         self.last_ang_error = 0.0
+        self.last_ang_error2 = 0.0
 
         # robot commands
         self.rudder = 0.0
@@ -228,7 +231,6 @@ class ASV_robot:
 
         angle_offset = math.atan2(des_point.y - self.state_est.y,
                                 des_point.x - self.state_est.x)
-
         distance = math.sqrt((des_point.y - self.state_est.y)**2 + 
                 (des_point.x - self.state_est.x)**2)
 
@@ -242,21 +244,66 @@ class ASV_robot:
         else:
             # Simple heading PD control
             ang_error = self.angleDiff(angle_offset- self.state_est.theta)
-            #print('ang_error', ang_error)
-            uL = -self.Kp * ang_error - (ang_error - self.last_ang_error)/self.dt * self.Kd - (ang_error - self.last_ang_error)*self.dt*self.Ki
-            uR = self.Kp * ang_error + (ang_error - self.last_ang_error)/self.dt * self.Kd + (ang_error - self.last_ang_error)*self.dt*self.Ki
-            self.last_ang_error = ang_error
+            # print(ang_error)
+            # print('ang_error', ang_error)
+            print(des_point.x, des_point.y)
             
-            percent_reached = (math.pi - abs(ang_error))/math.pi
-            if percent_reached <= 0.7:
-                u_nom = 0
-            else:
-                u_nom = percent_reached * 150
+            # PID control
+            # uL = -(self.last_uL + ang_error *(self.Ki * self.dt + self.Kp + self.Kd/self.dt) + self.last_ang_error*(-self.Kp - 2 * self.Kd/self.dt) + self.last_ang_error2 * self.Kd/self.dt)
+            # uR = self.last_uR + ang_error *(self.Ki * self.dt + self.Kp + self.Kd/self.dt) + self.last_ang_error*(-self.Kp - 2 * self.Kd/self.dt) + self.last_ang_error2 * self.Kd/self.dt
+           
+            # P control (working for pool!)
+            # uL = -self.Kp * ang_error
+            # uR = self.Kp * ang_error
+
+            ### PI control (working for pool!)
+            uL = self.last_uL - (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
+            uR = self.last_uR + (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
+            self.last_ang_error = ang_error
+            self.last_ang_error2 = self.last_ang_error
+            self.last_uL = uL
+            self.last_uR = uR
+            u_nom = 150
+            uR = uR * 100
+            uL = uL * 100
+            
+            ### Kinetic Model (not working)
+            # e_x = des_point.x - self.state_est.x 
+            # e_y = des_point.y - self.state_est.y
+            # v_x_des = 0
+            # v_y_des = 0
+            # current_x = 0.2
+            # current_y = 0
+            # u_nom = e_x * math.cos(self.state_est.theta) + e_y * math.sin(self.state_est.theta) + v_x_des * math.cos(self.state_est.theta) + v_y_des * math.sin(self.state_est.theta) + current_x * math.cos(self.state_est.theta) - current_y * math.sin(self.state_est.theta)
+            # r = e_x * math.sin(self.state_est.theta) - e_y * math.cos(self.state_est.theta) + v_x_des * math.sin(self.state_est.theta) - v_y_des * math.cos(self.state_est.theta) + current_x * math.sin(self.state_est.theta) - current_y * math.cos(self.state_est.theta)
+            # u_nom = u_nom * 10
+            # uR = -r/2 * 100
+            # uL = r/2 * 100
+
+            # Velocity angle offset
+            # current_x = 1
+            # current_y = 0
+            # uL = self.last_uL - (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
+            # uR = self.last_uR + (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
+            # self.last_ang_error = ang_error
+            # self.last_ang_error2 = self.last_ang_error
+            # self.last_uL = uL
+            # self.last_uR = uR
+            # u_nom = 150
+            # v_ang = atan2(current_y, current_x)
+            # uR = uR * 100 
+            # uL = uL * 100
+
+            # percent_reached = (math.pi - abs(ang_error))/math.pi
+            # if percent_reached <= 0.7:
+            #     u_nom = 0
+            # else:
+             #percent_reached * 150
             # if (abs(ang_error) >= 0.2):
             #     u_nom = 0
             
-            uR = uR * 100
-            uL = uL * 100
+            # uR = uR * 100
+            # uL = uL * 100
             # print("angle error %f" % ang_error)
             # print("u_nom %f" % u_nom)
             # print("ur %f, ul %f" % (uR, uL))
@@ -711,9 +758,10 @@ class ASV_sim(ASV_robot):
     def sim_loop(self):
         uR, uL = self.point_track(self.cur_des_point)
         # print("Left %f Right %f " % (uL, uR))  
-
+        # print(uR, uL)
         self.estimate_state()
         self.update_state(self.actual_state, uR, uL)
+        print(uR, uL)
 
         self.update_waypoint()
         time.sleep(0.1)
@@ -744,27 +792,34 @@ class ASV_sim(ASV_robot):
         ''' for simulation '''
         # uL = 0
         # uR = 0
-        uR = uR/ 200 /self.dt
-        uL = uL/ 200 / self.dt
+        uR = -uR/ 200 /self.dt
+        uL = -uL/ 200 / self.dt
 
-        b_l = 1 # sim linear drag
-        b_r = 0 # sim rotational drag 
-        I_zz = 6 # sim moment of inertia 
-        m = 50 # sim mass
+        current_v = 0.5
+        current_ang = 0
+
+
+        b_l = 35 # sim linear drag
+        b_r = 30 # sim rotational drag 
+        I_zz = 30 # sim moment of inertia 
+        m = 30 # sim mass
         robot_radius = 0.5
-
+  
        # update state
-        state.a = (uL + uR)/m - b_l/m * state.v
-        state.ang_acc = -b_r / I_zz * state.omega + 1/I_zz * 2 * robot_radius * (uR - uL)
+        state.a = 10*(uR + uL)/m - b_l/m * state.v
+        state.ang_acc = -b_r / I_zz * state.omega + 1/I_zz * 2 * robot_radius * (uL - uR)
         # print('damping :', -b_r / I_zz * state.omega)
         state.v = state.v + state.a * self.dt
         state.omega = state.omega + state.ang_acc * self.dt
         # print(state.omega)
         state.omega = min(max(state.omega, -1), 1)
         # update position
-        state.x = state.x + state.v*math.cos(self.angleDiff(state.theta)) * self.dt
-        state.y = state.y + state.v*math.sin(self.angleDiff(state.theta)) * self.dt
-        state.theta = self.angleDiff(state.theta + state.omega * self.dt)
+        state.x = state.x + state.v*math.cos(self.angleDiff(state.theta)) * self.dt + current_v * math.cos(self.angleDiff(current_ang)) * self.dt
+        state.y = state.y + state.v*math.sin(self.angleDiff(state.theta)) * self.dt + current_v * math.sin(self.angleDiff(current_ang))* self.dt
+        state.theta = self.angleDiff(state.theta + state.omega * self.dt) 
+        
+        # print(state.v)
+        # print(state.theta)
         # print("x, y:", state.x, state.y)
         # print(state.y)
         # self.state_est.lat, self.state_est.lon = utm.to_latlon(self.utm_x, self.utm_y, 11, 'S')
