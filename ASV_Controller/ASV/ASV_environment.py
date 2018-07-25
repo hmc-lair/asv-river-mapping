@@ -27,7 +27,7 @@ class ASV_environment:
         self.port_ser = None
         self.ADCP_ser = None
         self.mag_ser = None # magnetometer
-
+        self.xbee_network = None
         self.disable_xbee = True
 
         # Create serial port
@@ -101,8 +101,8 @@ class ASV_environment:
     def discover_xbee(self):
         self.my_xbee = XBeeDevice(self.XBEE_PORT, 9600)
         self.my_xbee.open()
-        xbee_network = self.my_xbee.get_network()
-        xbee_network.start_discovery_process()
+        self.xbee_network = self.my_xbee.get_network()
+        self.xbee_network.start_discovery_process()
         dest_xbee = None
 
         print('Looking for devices...')
@@ -110,9 +110,9 @@ class ASV_environment:
         while dest_xbee == None:
             if tries >= 5:
                 break
-            while xbee_network.is_discovery_running():
+            while self.xbee_network.is_discovery_running():
                 time.sleep(0.5)
-            dest_xbee = xbee_network.discover_device('central')
+            dest_xbee = self.xbee_network.discover_device('central')
             tries += 1
 
         if dest_xbee == None:

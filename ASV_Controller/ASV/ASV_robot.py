@@ -7,6 +7,7 @@ import threading
 import time
 import struct
 import numpy.random
+import numpy as np
 
 class ASV_robot:
 
@@ -28,9 +29,9 @@ class ASV_robot:
         self.motor_stop = False
 
         # Controller Params
-        self.Kp = 10
+        self.Kp = 20
         self.Kd = 0
-        self.Ki = 1
+        self.Ki = 0
         self.last_uL = 0.0
         self.last_uR = 0.0
         self.last_ang_error = 0.0
@@ -40,7 +41,8 @@ class ASV_robot:
         self.rudder = 0.0
         self.R_motor = 0.0
         self.L_motor = 0.0
-        self.motor_threshold = 300
+        self.back_spin_threshold = 300
+        self.forward_threshold = 800
 
         # GPS Data and Coordinate
         self.GPS_fix_quality = 0
@@ -74,6 +76,7 @@ class ASV_robot:
         self.GPS_thread = None
         self.ADCP_thread = None
         self.mag_thread = None
+        self.check_xbee_thread = None
 
         # Program termination
         self.terminate = False
@@ -164,6 +167,9 @@ class ASV_robot:
                 self.robot_shutdown()
             else:
                 self.environment.my_xbee.add_data_received_callback(self.xbee_callback)
+                self.check_xbee_thread = threading.Thread(name = 'Xbee Thread', target = self.check_xbee)
+                self.check_xbee_thread.setDaemon(True)
+                self.check_xbee_thread.start()
 
         # Initialize GPS thread
         self.GPS_thread = threading.Thread(name = 'GPS Thread', target = self.update_GPS)
@@ -280,20 +286,6 @@ class ASV_robot:
             # uR = -r/2 * 100
             # uL = r/2 * 100
 
-            # Velocity angle offset
-            # current_x = 1
-            # current_y = 0
-            # uL = self.last_uL - (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
-            # uR = self.last_uR + (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
-            # self.last_ang_error = ang_error
-            # self.last_ang_error2 = self.last_ang_error
-            # self.last_uL = uL
-            # self.last_uR = uR
-            # u_nom = 150
-            # v_ang = atan2(current_y, current_x)
-            # uR = uR * 100 
-            # uL = uL * 100
-
             # percent_reached = (math.pi - abs(ang_error))/math.pi
             # if percent_reached <= 0.7:
             #     u_nom = 0
@@ -308,8 +300,96 @@ class ASV_robot:
             # print("u_nom %f" % u_nom)
             # print("ur %f, ul %f" % (uR, uL))
             # cap the distance
-            u_starboard = -min(max(u_nom + uR, -self.motor_threshold), 200)
-            u_port = -min(max(u_nom + uL, -self.motor_threshold), 200)
+            u_starboard = -min(max(u_nom + uR, -self.back_spin_threshold), self.forward_threshold)
+            u_port = -min(max(u_nom + uL, -self.back_spin_threshold), self.forward_threshold)
+
+        return u_port, u_starboard
+
+    def point_track2(self, des_point):
+        ''' Point tracker that uses ASV's course velocity instead of heading'''
+        speed_des = 5
+
+        # Find robot velocity (make this into asv state later)
+        robot_vx = self.state_est.v_course * math.cos(self.state_est.ang_course)
+        robot_vy = self.state_est.v_course * math.sin(self.state_est.ang_course)
+        
+        # calculate desired angle displacement
+        des_angle = math.atan2(des_point.y - self.state_est.y,
+                                des_point.x - self.state_est.x)
+        
+        # Find angle difference between desired trajectory and current trajectory
+        v_x_des = speed_des * math.cos(des_angle)
+        v_y_des = speed_des * math.sin(des_angle)
+        robot_v = np.array([robot_vx, robot_vy])
+       
+        v_des_ang = math.atan2(v_y_des, v_x_des)
+        robot_v_ang = math.atan2(robot_vy, robot_vx)
+        angle_off = self.angleDiff(v_des_ang - robot_v_ang)
+        # if abs(angle_off) > 1.0:
+        #     # make sure it doesn't go over or below 1
+        #     angle_off = abs(angle_off)/angle_off * 1.0
+
+        # # acos is only positive so check which trajectory is on top
+        # angle_off = math.acos(float(angle_off))
+
+        # if self.angleDiff(v_des_ang - robot_v_ang) < 0:
+        #     angle_off = -angle_off
+        course_speed = math.sqrt(np.dot(robot_v,robot_v))
+        print("vx: %f, vy: %f" % (robot_vx, robot_vy))
+        print("v_desx: %f, v_desy: %f" % (v_x_des, v_y_des))
+        print("Angle off: ", angle_off)
+        print("Speed :" , course_speed)
+
+        ### Use current to predict offset
+        # Current displacement vector
+        # current_x = self.state_est.current_v * math.cos(self.state_est.current_ang)
+        # current_y = self.state_est.current_v * math.sin(self.state_est.current_ang)
+        # cur_displacement_x = current_x 
+        # cur_displacement_y = current_y 
+        # cur_displacement = np.array([cur_displacement_x, cur_displacement_y])
+
+        # # Distance displacement vector
+        # des_direction = np.array([self.state_est.x - des_point.x, self.state_est.y - des_point.y])
+        # new_direction = des_direction - cur_displacement
+        # angle_off = np.dot(new_direction, des_direction)/(np.sqrt(np.dot(new_direction, new_direction)) * np.sqrt(np.dot(des_direction, des_direction)))
+        # if abs(angle_off) > 1.0:
+        #     angle_off = abs(angle_off)/angle_off * 1.0
+        # angle_off = math.acos(float(angle_off))
+        # new_angle = self.angleDiff(des_angle - angle_off)
+        # des_angle = des_angle
+        # print("Des direction ", des_direction)
+        # print("New direction ", new_direction)
+        # print("Desired Angle %f, New Angle %f" % (des_angle, new_angle))
+
+        distance = math.sqrt((des_point.y - self.state_est.y)**2 + 
+                (des_point.x - self.state_est.x)**2)
+
+        if distance <= self.dist_threshold or self.des_reached:
+            # if self.des_reached == False: # Just print the first time destination reached
+            # print('Destination reached! Turning off motors.')
+            self.stop_motor = True
+            self.des_reached = True
+            u_starboard = 0.0
+            u_port = 0.0
+        else:
+            # Simple heading PD control
+            ang_error = self.angleDiff(des_angle- self.state_est.theta)
+            ang_error = angle_off
+            # print(des_point.x, des_point.y)
+            
+            uL = self.last_uL - (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
+            uR = self.last_uR + (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
+            self.last_ang_error = ang_error
+            self.last_ang_error2 = self.last_ang_error
+            self.last_uL = uL
+            self.last_uR = uR
+            u_nom = (speed_des - course_speed) * 400
+            print(u_nom)
+            uR = uR * 100
+            uL = uL * 100
+            
+            u_starboard = -min(max(u_nom + uR, -self.back_spin_threshold), self.forward_threshold)
+            u_port = -min(max(u_nom + uL, -self.back_spin_threshold), self.forward_threshold)
 
         return u_port, u_starboard
 
@@ -400,6 +480,19 @@ class ASV_robot:
                 msg_binary = msg.encode()
                 self.environment.my_xbee.send_data_async(self.environment.dest_xbee, msg_binary)
 
+    def check_xbee(self):
+        '''Keep checking if the xbee is connected'''
+        while True:
+            if self.terminate == True:
+                break
+            else:
+                self.environment.xbee_network.start_discovery_process()
+                while self.environment.xbee_network.is_discovery_running():
+                    time.sleep(0.1)
+                if self.xbee_network.discover_device('central') == None:
+                    self.terminate = True
+                    break
+
 ###############################################################################
 # Magnetometer Functions
 ###############################################################################
@@ -476,6 +569,9 @@ class ASV_robot:
                     raw_msg[1] = raw_msg[1][1:]
                 self.GPS_speed = float(raw_msg[7])*1000/3600 # from km/hr to m/s
                 self.GPS_course = float(raw_msg[1]) # course over ground in degrees
+                self.v_course = self.GPS_speed
+                self.GPS_course = (-self.ang_course + 90)/180 * math.pi
+
                 print("Speed %f, Course %d" % (self.GPS_speed, self.GPS_course))
 
 
@@ -756,12 +852,13 @@ class ASV_sim(ASV_robot):
         self.actual_state = ASV_state(0,0,0)
 
     def sim_loop(self):
-        uR, uL = self.point_track(self.cur_des_point)
+        uR, uL = self.point_track2(self.cur_des_point)
         # print("Left %f Right %f " % (uL, uR))  
         # print(uR, uL)
         self.estimate_state()
         self.update_state(self.actual_state, uR, uL)
-        print(uR, uL)
+
+        # print(uR, uL)
 
         self.update_waypoint()
         time.sleep(0.1)
@@ -795,9 +892,8 @@ class ASV_sim(ASV_robot):
         uR = -uR/ 200 /self.dt
         uL = -uL/ 200 / self.dt
 
-        current_v = 0.5
+        current_v = 3
         current_ang = 0
-
 
         b_l = 35 # sim linear drag
         b_r = 30 # sim rotational drag 
@@ -808,14 +904,25 @@ class ASV_sim(ASV_robot):
        # update state
         state.a = 10*(uR + uL)/m - b_l/m * state.v
         state.ang_acc = -b_r / I_zz * state.omega + 1/I_zz * 2 * robot_radius * (uL - uR)
-        # print('damping :', -b_r / I_zz * state.omega)
+
         state.v = state.v + state.a * self.dt
         state.omega = state.omega + state.ang_acc * self.dt
-        # print(state.omega)
+
+        robot_vx = state.v * math.cos(state.theta) + state.current_v * math.cos(state.current_ang)
+        robot_vy = state.v * math.sin(state.theta) + state.current_v * math.sin(state.current_ang)
+        v_robot = np.array([robot_vx, robot_vy])
+        
+        state.ang_course = math.atan2(v_robot[1], v_robot[0])
+        state.v_course = math.sqrt(np.dot(v_robot,v_robot))
+
+        print("course: ", state.v_course)
+        print("course ang: ", state.ang_course)
+
         state.omega = min(max(state.omega, -1), 1)
+        
         # update position
-        state.x = state.x + state.v*math.cos(self.angleDiff(state.theta)) * self.dt + current_v * math.cos(self.angleDiff(current_ang)) * self.dt
-        state.y = state.y + state.v*math.sin(self.angleDiff(state.theta)) * self.dt + current_v * math.sin(self.angleDiff(current_ang))* self.dt
+        state.x = state.x + state.v*math.cos(self.angleDiff(state.theta)) * self.dt + self.state_est.current_v * math.cos(self.angleDiff(self.state_est.current_ang)) * self.dt
+        state.y = state.y + state.v*math.sin(self.angleDiff(state.theta)) * self.dt + self.state_est.current_v * math.sin(self.angleDiff(self.state_est.current_ang))* self.dt
         state.theta = self.angleDiff(state.theta + state.omega * self.dt) 
         
         # print(state.v)
