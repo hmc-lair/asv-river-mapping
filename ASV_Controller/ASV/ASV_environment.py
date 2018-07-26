@@ -51,7 +51,7 @@ class ASV_environment:
 
     def setup_magnetometer(self):
         self.mag_ser = serial.Serial(self.mag_port, 9600)
-        self.mag_ser.flushInput()
+        # self.mag_ser.flushInput()
 
 ###############################################################################
 # ADCP Functions
@@ -64,9 +64,19 @@ class ASV_environment:
         self.ADCP_ser.flush()
         print("Starting ADCP communication")
         self.ADCP_ser.write(b'+++')
-        time.sleep(3)
+        time.sleep(0.5)
         s = self.read_ADCP_response(verbose=True)
         print('Startup message: ', s)
+
+        self.send_ADCP(b'EX11110')
+        s = self.read_ADCP_response(verbose=True)
+        time.sleep(0.1)
+        print("Coordinate message: ", s)
+
+        self.send_ADCP(b'EA+04500')
+        s = self.read_ADCP_response(verbose=True)
+        time.sleep(0.1)
+        print("Angle offset message: ", s)
 
 
     def send_ADCP(self, command):

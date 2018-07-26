@@ -8,6 +8,7 @@ import time
 import struct
 import numpy.random
 import numpy as np
+from digi.xbee.exception import XBeeException
 
 class ASV_robot:
 
@@ -17,6 +18,7 @@ class ASV_robot:
 
         # angle offset
         self.adcp_angle_offset = 45 # degrees
+        self.speed_des = 0.5
 
         # Way points to navigate
         self.cur_des_point = ASV_state()
@@ -29,7 +31,8 @@ class ASV_robot:
         self.motor_stop = False
 
         # Controller Params
-        self.Kp = 20
+        self.Kp_ang = 20
+        self.Kp_nom = 500
         self.Kd = 0
         self.Ki = 0
         self.last_uL = 0.0
@@ -41,8 +44,8 @@ class ASV_robot:
         self.rudder = 0.0
         self.R_motor = 0.0
         self.L_motor = 0.0
-        self.back_spin_threshold = 300
-        self.forward_threshold = 800
+        self.back_spin_threshold = 700
+        self.forward_threshold = 500
 
         # GPS Data and Coordinate
         self.GPS_fix_quality = 0
@@ -70,6 +73,8 @@ class ASV_robot:
         self.v_boat = [0, 0]
         self.depths = [0, 0, 0, 0]
         self.bt_boat_beams = [0, 0, 0,0]
+        self.relative_surface_velocities = [0,0,0,0]
+        self.surface_velocities = [0,0,0,0]
         self.ADCP_received = False
 
         # threads
@@ -77,6 +82,8 @@ class ASV_robot:
         self.ADCP_thread = None
         self.mag_thread = None
         self.check_xbee_thread = None
+
+        self.bad_connection_limit = 52
 
         # Program termination
         self.terminate = False
@@ -121,8 +128,9 @@ class ASV_robot:
         # print("Heading: ", self.heading)
         
         # Compute control signal
-        port, strboard = self.point_track(self.cur_des_point)
+        port, strboard = self.point_track2(self.cur_des_point)
 
+        print("Left %f, Right %f" % (-port, -strboard))
         # 4. Update control signals
         self.update_control(port, strboard)
         #self.update_control(-200, 300)
@@ -144,7 +152,7 @@ class ASV_robot:
 
     def robot_setup(self):
         print('Setting up...')
-        self.environment.disable_xbee = False
+        self.environment.disable_xbee = True
 
         # Setup Hardware
         if (self.environment.robot_mode == "HARDWARE MODE"):
@@ -187,8 +195,8 @@ class ASV_robot:
         
         # Begin threads
         self.GPS_thread.start()
-        # self.environment.start_ping()
-        # self.ADCP_thread.start()
+        self.environment.start_ping()
+        self.ADCP_thread.start()
         self.mag_thread.start()
 
     def robot_shutdown(self):
@@ -263,8 +271,8 @@ class ASV_robot:
             # uR = self.Kp * ang_error
 
             ### PI control (working for pool!)
-            uL = self.last_uL - (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
-            uR = self.last_uR + (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
+            uL = self.last_uL - (ang_error * (self.Kp_ang + self.Ki * self.dt) - self.last_ang_error * self.Kp_ang)
+            uR = self.last_uR + (ang_error * (self.Kp_ang + self.Ki * self.dt) - self.last_ang_error * self.Kp_ang)
             self.last_ang_error = ang_error
             self.last_ang_error2 = self.last_ang_error
             self.last_uL = uL
@@ -307,7 +315,7 @@ class ASV_robot:
 
     def point_track2(self, des_point):
         ''' Point tracker that uses ASV's course velocity instead of heading'''
-        speed_des = 5
+        speed_des = self.speed_des
 
         # Find robot velocity (make this into asv state later)
         robot_vx = self.state_est.v_course * math.cos(self.state_est.ang_course)
@@ -335,10 +343,10 @@ class ASV_robot:
         # if self.angleDiff(v_des_ang - robot_v_ang) < 0:
         #     angle_off = -angle_off
         course_speed = math.sqrt(np.dot(robot_v,robot_v))
-        print("vx: %f, vy: %f" % (robot_vx, robot_vy))
-        print("v_desx: %f, v_desy: %f" % (v_x_des, v_y_des))
-        print("Angle off: ", angle_off)
-        print("Speed :" , course_speed)
+        # print("vx: %f, vy: %f" % (robot_vx, robot_vy))
+        # print("v_desx: %f, v_desy: %f" % (v_x_des, v_y_des))
+        # print("Angle off: ", angle_off)
+        # print("Speed :" , course_speed)
 
         ### Use current to predict offset
         # Current displacement vector
@@ -377,19 +385,33 @@ class ASV_robot:
             ang_error = angle_off
             # print(des_point.x, des_point.y)
             
-            uL = self.last_uL - (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
-            uR = self.last_uR + (ang_error * (self.Kp + self.Ki * self.dt) - self.last_ang_error * self.Kp)
+            uL = self.last_uL - (ang_error * (self.Kp_ang + self.Ki * self.dt) - self.last_ang_error * self.Kp_ang)
+            uR = self.last_uR + (ang_error * (self.Kp_ang + self.Ki * self.dt) - self.last_ang_error * self.Kp_ang)
+            
+
             self.last_ang_error = ang_error
             self.last_ang_error2 = self.last_ang_error
             self.last_uL = uL
             self.last_uR = uR
-            u_nom = (speed_des - course_speed) * 400
-            print(u_nom)
-            uR = uR * 100
-            uL = uL * 100
+            u_nom = (speed_des - course_speed) * self.Kp_nom + 100
+            print("u_nom: ", u_nom)
+            print("current speed: ", self.state_est.v_course)
+            uL = uL * 50
+            uR = uR * 50
+            # if uR > 0:
+            #     uR = uR * 80
+            # else:
+            #     uR = uR * 30
+
+            # if uL > 0:
+            #     uL = uL * 80
+            # else:
+            #     uL = uL * 30
             
+
             u_starboard = -min(max(u_nom + uR, -self.back_spin_threshold), self.forward_threshold)
             u_port = -min(max(u_nom + uL, -self.back_spin_threshold), self.forward_threshold)
+
 
         return u_port, u_starboard
 
@@ -423,6 +445,13 @@ class ASV_robot:
         '''state estimate with DVL'''
         # self.state_est.theta = self.heading / 180 * math.pi
         # self.v_boat[0], self.v_boat[1] = self.convert_bt_velocities(self.roll, self.pitch, self.heading, self.bt_boat_beams)
+        self.v_boat[0] = self.bt_boat_beams[0]
+        self.v_boat[1] = self.bt_boat_beams[1]
+
+        self.surface_velocities[0] = self.v_boat[0] - self.relative_surface_velocities[0]
+        self.surface_velocities[1] = self.v_boat[1] - self.relative_surface_velocities[1]
+        # print("Surface Velocities: ", self.surface_velocities)
+        # print("Bt velocities: ", self.v_boat)
         self.ADCP_received = False
 
     def update_odometry(self):
@@ -464,6 +493,13 @@ class ASV_robot:
         elif parsed_data[0] == "!HEADINGOFFSET":
             self.heading_offset = float(parsed_data[1])
             print('Heading message received. Angle offsetted')
+        elif parsed_data[0] == "!SETSPEED":
+            self.speed_des = float(parsed_data[1])
+        elif parsed_data[0] == "!GAIN":
+            self.Kp_ang = float(parsed_data[1])
+            self.Kp_nom = float(parsed_data[2])
+            self.forward_threshold = float(parsed_data[3])
+            self.back_spin_threshold = float(parsed_data[4])
         else:
             print('Unknown command!')
 
@@ -476,22 +512,30 @@ class ASV_robot:
         else:
             if self.terminate == False:
                 average_depth = sum(self.depths)/len(self.depths)
-                msg = "!DATA, %f, %f, %f, %f, %f, %f" % (self.state_est.x, self.state_est.y, self.heading, average_depth, self.v_boat[0], self.v_boat[1])
+                current_speed = math.sqrt(self.v_boat[0]**2 + self.v_boat[1]**2)
+                msg = "!DATA, %f, %f, %f, %f, %f, %f" % (self.state_est.x, self.state_est.y, self.heading, average_depth, current_speed)
                 msg_binary = msg.encode()
                 self.environment.my_xbee.send_data_async(self.environment.dest_xbee, msg_binary)
 
     def check_xbee(self):
         '''Keep checking if the xbee is connected'''
+        self.environment.my_xbee.set_sync_ops_timeout(10)
+        bad_count = 0
         while True:
             if self.terminate == True:
                 break
             else:
-                self.environment.xbee_network.start_discovery_process()
-                while self.environment.xbee_network.is_discovery_running():
-                    time.sleep(0.1)
-                if self.xbee_network.discover_device('central') == None:
-                    self.terminate = True
-                    break
+                print("Checking")
+                try:
+                    self.environment.my_xbee.send_data(self.environment.dest_xbee, b'Hi')
+                    bad_count = 0
+                except XBeeException:
+                    print("bad response")
+                    time.sleep(1)
+                    if bad_count >= self.bad_connection_limit:
+                        self.terminate = True
+                        break
+                    bad_count += 1
 
 ###############################################################################
 # Magnetometer Functions
@@ -501,7 +545,9 @@ class ASV_robot:
             if self.terminate == True:
                 break
             else:
+                # print("In mag loop: ")
                 data_str = self.environment.mag_ser.readline()
+                # print(data_str)
                 mag_data =data_str.decode().split(',')
                 # self.all_data_f.write(data_str)
                 self.heading = float(mag_data[1]) + 90 + self.heading_offset
@@ -540,7 +586,7 @@ class ASV_robot:
             #print(raw_msg)
             if self.GPS_fix_quality == '0' or self.GPS_fix_quality == '\x00' or self.GPS_fix_quality == '\x000':
                 self.GPS_received = False
-                print('Bad GPS, no fix :(')
+                # print('Bad GPS, no fix :(')
             else:
                 if "\x00" in raw_msg[2]:
                     return
@@ -557,22 +603,41 @@ class ASV_robot:
                 self.GPS_received = True
                 print('GPS: ', self.state_est.x, self.state_est.y)
         elif raw_msg[0] == '$GPVTG':
-            if raw_msg[9] == 'N' or len(raw_msg) < 9:
+            # print(raw_msg)
+            if len(raw_msg) < 10:
+                return
+            if raw_msg[9] == 'N' or raw_msg[1] == "":
                 # not valid data
-                pass
+                return
             else:
                 # print(raw_msg)
+                speed_msg = ''
+                course_msg = ''
                 if "\x00" in raw_msg[7]:
-                    print("cutting extra char")
-                    raw_msg[7] = raw_msg[7][1:]
-                if "\x00" in raw_msg[1]:
-                    raw_msg[1] = raw_msg[1][1:]
-                self.GPS_speed = float(raw_msg[7])*1000/3600 # from km/hr to m/s
-                self.GPS_course = float(raw_msg[1]) # course over ground in degrees
-                self.v_course = self.GPS_speed
-                self.GPS_course = (-self.ang_course + 90)/180 * math.pi
+                    for i in range(len(raw_msg[7])):
+                        if raw_msg[7][i] == "\x00":
+                            speed_msg += "0"
+                        else:
+                            speed_msg += raw_msg[7][i]
+                else:
+                    speed_msg = raw_msg[7]
 
-                print("Speed %f, Course %d" % (self.GPS_speed, self.GPS_course))
+                if "\x00" in raw_msg[1]:
+                    for i in range(len(raw_msg[1])):
+                        if raw_msg[1][i] == "\x00":
+                            course_msg += "0"
+                        else:
+                            course_msg += raw_msg[1][i]
+                else:
+                    course_msg = raw_msg[1]
+
+                self.GPS_speed = float(speed_msg)*1000/3600 # from km/hr to m/s
+                self.GPS_course = float(course_msg) # course over ground in degrees
+                self.state_est.v_course = self.GPS_speed
+                self.state_est.ang_course = self.angleDiff((-self.GPS_course + 360 + 90)/180.0 * math.pi)
+                # self.GPS_course = (-self.state_est.ang_course + 90)/180 * math.pi
+
+                # print("Speed %f, Course %f" % (self.state_est.v_course, self.state_est.ang_course))
 
 
 
@@ -602,6 +667,7 @@ class ASV_robot:
                 self.ADCP_pitch = data[2]
                 self.depths = data[3:7]
                 self.bt_boat_beams = data[7:11]
+                self.relative_surface_velocities = data[11:15]
                 self.ADCP_received = True
                 # print(self.bt_boat_beams)
 
@@ -680,6 +746,9 @@ class ASV_robot:
             num_cells = all_data[fixed_offset+9]
             pings_per_ensemble = int.from_bytes(all_data[fixed_offset+10: fixed_offset+12], byteorder='little')
             depth_cell_length = int.from_bytes(all_data[fixed_offset+12: fixed_offset+14], byteorder='little')
+            coord_transform = all_data[fixed_offset+25]
+            heading_alignment = int.from_bytes(all_data[fixed_offset+26:fixed_offset+28], byteorder='little')
+            # print('Heading alignment: ', heading_alignment)
 
             # VARIABLE LEADER
             variable_offset = offsets[1]
@@ -698,10 +767,10 @@ class ASV_robot:
             for i in range(num_cells):
                 start_offset = velocity_profile_offset + 2 + 2*i
                 # Average over beams
-                vel = 0
+                vel = []
                 for j in range(num_beams):
-                    vel += int.from_bytes(all_data[start_offset + 2*j: start_offset + 2 + 2*j], byteorder='little', signed=True)
-                vel = vel/float(num_beams)
+                    curVel = int.from_bytes(all_data[start_offset + 2*j: start_offset + 2 + 2*j], byteorder='little', signed=True)
+                    vel.append(curVel)
                 relative_velocities.append(vel)
 
             # BOTTOM TRACK (abbr. bt) (see page 154)
@@ -747,9 +816,11 @@ class ASV_robot:
                 GPS_msg.append(all_data[g_offset+15: g_offset+15+msg_size])
 
             delta_times_double = [struct.unpack('d', b)[0] for b in delta_times_bytes] # convert to double
+            surface_vel = relative_velocities[0]
             essential = [heading, roll, pitch]
             essential = essential + bt_ranges
             essential = essential + bt_velocities
+            essential = essential + surface_vel
             return essential
 
     def convert_bt_velocities(self, roll, pitch, heading, bt_vels):
