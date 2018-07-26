@@ -50,8 +50,8 @@ class ASV_Controller:
             self.robot = ASV_robot.ASV_sim(self.sim_env)
             
             # Specify robot location (50,50) in pixel coordinates
-            self.robot.actual_state.x = 396168.0
-            self.robot.actual_state.y = 3777912.0
+            self.robot.actual_state.x = 327582.0 #396168.0
+            self.robot.actual_state.y = 3923532.0 #3777912.0
             self.robot.actual_state.theta = 0
             self.robot.estimate_state()
 
@@ -95,6 +95,7 @@ class ASV_Controller:
                 self.robot.state_est.y = float(parsed_data[2])
                 self.robot.state_est.theta = float(parsed_data[3])
                 self.depth = float(parsed_data[4])
+                self.cur_speed = float(parsed_data[5])
 
 
 

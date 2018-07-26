@@ -246,7 +246,7 @@ class ASV_robot:
             ang_error = self.angleDiff(angle_offset- self.state_est.theta)
             # print(ang_error)
             # print('ang_error', ang_error)
-            print(des_point.x, des_point.y)
+            # print(des_point.x, des_point.y)
             
             # PID control
             # uL = -(self.last_uL + ang_error *(self.Ki * self.dt + self.Kp + self.Kd/self.dt) + self.last_ang_error*(-self.Kp - 2 * self.Kd/self.dt) + self.last_ang_error2 * self.Kd/self.dt)
@@ -761,7 +761,7 @@ class ASV_sim(ASV_robot):
         # print(uR, uL)
         self.estimate_state()
         self.update_state(self.actual_state, uR, uL)
-        print(uR, uL)
+        # print(uR, uL)
 
         self.update_waypoint()
         time.sleep(0.1)
