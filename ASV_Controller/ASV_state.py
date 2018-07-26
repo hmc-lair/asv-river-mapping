@@ -8,8 +8,15 @@ class ASV_state:
 	def set_state(self, x, y, theta):
 		self.x = x
 		self.y = y
-		self.v = 0.0
+		self.v = 0
 		self.a = 0.0
+
+		# Course velocity and course angle as presented by GPVTG message
+		self.v_course = 0 
+		self.ang_course = 0
+
+		self.current_v = 3
+		self.current_ang = math.pi/5
 
 		self.roll = 0.0
 		self.pitch = 0.0

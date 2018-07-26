@@ -27,7 +27,7 @@ class ASV_environment:
         self.port_ser = None
         self.ADCP_ser = None
         self.mag_ser = None # magnetometer
-
+        self.xbee_network = None
         self.disable_xbee = True
 
         # Create serial port
@@ -51,7 +51,7 @@ class ASV_environment:
 
     def setup_magnetometer(self):
         self.mag_ser = serial.Serial(self.mag_port, 9600)
-        self.mag_ser.flushInput()
+        # self.mag_ser.flushInput()
 
 ###############################################################################
 # ADCP Functions
@@ -64,9 +64,19 @@ class ASV_environment:
         self.ADCP_ser.flush()
         print("Starting ADCP communication")
         self.ADCP_ser.write(b'+++')
-        time.sleep(3)
+        time.sleep(0.5)
         s = self.read_ADCP_response(verbose=True)
         print('Startup message: ', s)
+
+        self.send_ADCP(b'EX11110')
+        s = self.read_ADCP_response(verbose=True)
+        time.sleep(0.1)
+        print("Coordinate message: ", s)
+
+        self.send_ADCP(b'EA+04500')
+        s = self.read_ADCP_response(verbose=True)
+        time.sleep(0.1)
+        print("Angle offset message: ", s)
 
 
     def send_ADCP(self, command):
@@ -101,8 +111,8 @@ class ASV_environment:
     def discover_xbee(self):
         self.my_xbee = XBeeDevice(self.XBEE_PORT, 9600)
         self.my_xbee.open()
-        xbee_network = self.my_xbee.get_network()
-        xbee_network.start_discovery_process()
+        self.xbee_network = self.my_xbee.get_network()
+        self.xbee_network.start_discovery_process()
         dest_xbee = None
 
         print('Looking for devices...')
@@ -110,9 +120,9 @@ class ASV_environment:
         while dest_xbee == None:
             if tries >= 5:
                 break
-            while xbee_network.is_discovery_running():
+            while self.xbee_network.is_discovery_running():
                 time.sleep(0.5)
-            dest_xbee = xbee_network.discover_device('central')
+            dest_xbee = self.xbee_network.discover_device('central')
             tries += 1
 
         if dest_xbee == None:
