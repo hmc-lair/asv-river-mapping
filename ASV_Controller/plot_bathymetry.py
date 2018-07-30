@@ -18,18 +18,23 @@ millikan2 = 'Log/millikan_7-19/ALL_18-07-12 00.16.04.bin' #2) Good
 millikan3 = 'Log/millikan_7-19/ALL_18-07-11 23.36.33.bin' #3) Good
 millikan4 = 'Log/millikan_7-19/ALL_18-07-12 00.24.24.bin' #4) Large range
 
-data_file = millikan4
+lake1 = 'Log/lake_7-27/ALL_18-07-12 06.49.05.bin'
+
+river1 = 'Log/river_7-27/ALL_18-07-12 06.47.41.bin'
+river2 = 'Log/river_7-27/ALL_18-07-12 06.26.13.bin'
+
+data_file = river1
 
 #Mission files
 #TODO: add mission file
-mission_file = 'Missions/millikan_lawnmower1.csv'
+mission_file = 'Missions/river_last.csv'
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
-map_file = '../Maps/cast.tif'
+map_file = '../Maps/output.tif'
 
 # Plot parameters
-CELL_RES = 1
+CELL_RES = 0.5
 win = 5
 sigma_slope = 0.1204
 sigma_offset = 0.6142
@@ -186,7 +191,7 @@ def main():
         for j in range(m):
             B_new[i][j] = B[j][i]
 
-    X_plot, Y_plot = np.meshgrid(np.arange(min_x, min_x + m), np.arange(min_y, min_y + n))
+    X_plot, Y_plot = np.meshgrid(np.arange(min_x, min_x + m*CELL_RES, CELL_RES), np.arange(min_y, min_y + n*CELL_RES, CELL_RES))
     ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
     surf = ax1.plot_surface(X_plot, Y_plot, B_new, cmap=cm.viridis) #depths
 

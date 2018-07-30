@@ -18,7 +18,7 @@ class ASV_Controller:
 
         # ADCP measuremens
         self.depth = 0.0
-        self.v_boat = 0.0
+        self.cur_speed = 0.0
 
         if self.mode == "HARDWARE MODE":
             self.sim_env = ASV_environment.ASV_sim_env()

@@ -11,22 +11,22 @@ import math
 # IMAGE_HEIGHT = 250.
 # MAP_FILE = '../Maps/cast.tif'
 
-# IMAGE_WIDTH = 1000
-# IMAGE_HEIGHT = 800
-# MAP_FILE = '../Maps/river_section.tif'
+IMAGE_WIDTH = 600
+IMAGE_HEIGHT = 400
+MAP_FILE = '../Maps/river_7.27.tif'
 
 # IMAGE_WIDTH = 1000
 # IMAGE_HEIGHT = 700
-# MAP_FILE = '../Maps/output.tif'
+# MAP_FILE = '../Maps/lake.tif'
 
-IMAGE_WIDTH = 300
-IMAGE_HEIGHT = 200
-MAP_FILE = '../Maps/river.tif'
+# IMAGE_WIDTH = 300
+# IMAGE_HEIGHT = 200
+# MAP_FILE = '../Maps/river.tif'
 
 MAP_WIDTH = 800
 MAP_HEIGHT = 600
 
-POINT_RADIUS = 5
+POINT_RADIUS = 3
 
 class ASV_graphics:
     def __init__(self, controller):
@@ -257,8 +257,8 @@ class ASV_graphics:
                     way_point_msg = "!WP, %f, %f" % (x, y)
                     print(way_point_msg)
                     self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
-                print('Waiting for wps to send...')
-                time.sleep(2)
+                # print('Waiting for wps to send...')
+                # time.sleep(2)
                 start_mission_msg = "!STARTMISSION"
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, start_mission_msg.encode())
             else:
