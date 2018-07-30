@@ -31,7 +31,7 @@ mission_file = 'Missions/river_last.csv'
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
-map_file = '../Maps/output.tif'
+map_file = '../Maps/river_7-27.tif'
 
 # Plot parameters
 CELL_RES = 0.5
