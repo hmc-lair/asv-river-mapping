@@ -27,7 +27,6 @@ class ASV_robot:
         self.des_reached = True
         self.dist_threshold = 3
         self.dt = 0.01
-
         self.motor_stop = False
 
         # Controller Params
@@ -83,7 +82,7 @@ class ASV_robot:
         self.mag_thread = None
         self.check_xbee_thread = None
 
-        self.bad_connection_limit = 52
+        self.bad_connection_limit = 5
 
         # Program termination
         self.terminate = False
@@ -100,6 +99,9 @@ class ASV_robot:
         if self.log_data == True:
             self.all_data_filename = 'Log/ALL_' + time_stamp + ".bin"
             self.all_data_f = open(self.all_data_filename, 'wb')
+
+        self.mission_debug = True
+        self.control_debug = False
         # data to log: GPS, ADCP, heading
 
     def main_loop(self):
@@ -128,19 +130,25 @@ class ASV_robot:
         # print("Heading: ", self.heading)
         
         # Compute control signal
-        port, strboard = self.point_track2(self.cur_des_point)
+        port, strboard = self.point_track(self.cur_des_point)
 
-        print("Left %f, Right %f" % (-port, -strboard))
+        
         # 4. Update control signals
-        self.update_control(port, strboard)
-        #self.update_control(-200, 300)
-        #print("Left %f Right %f " % (-port, -strboard)) 
+        if self.motor_stop == False:
+            self.update_control(port, strboard)
+
 
         # if (strboard > port):
         #     print("turning left")
         # elif (strboard < port):
         #     print("turning right")
         # self.update_control(strboard, port)
+        if self.control_debug:
+            print("Left %f, Right %f" % (-port, -strboard))
+            print("Boat speed: ", self.state_est.v_course)
+            print("Course angle: ", self.state_est.ang_course)
+            print("Des Speed: %f, Kp_a: %f, Kp_nom: %f, U_lim: %f, L_lim: %f" % (self.speed_des, self.Kp_ang, self.Kp_nom, self.forward_threshold, self.back_spin_threshold))
+
 
         time.sleep(0.2)
 
@@ -152,7 +160,7 @@ class ASV_robot:
 
     def robot_setup(self):
         print('Setting up...')
-        self.environment.disable_xbee = True
+        self.environment.disable_xbee = False
 
         # Setup Hardware
         if (self.environment.robot_mode == "HARDWARE MODE"):
@@ -242,11 +250,17 @@ class ASV_robot:
 
     def point_track(self, des_point):
         '''Generate motor values given a point and current state'''
-
+        speed_des = self.speed_des
         angle_offset = math.atan2(des_point.y - self.state_est.y,
                                 des_point.x - self.state_est.x)
         distance = math.sqrt((des_point.y - self.state_est.y)**2 + 
                 (des_point.x - self.state_est.x)**2)
+
+        # Find robot velocity (make this into asv state later)
+        robot_vx = self.state_est.v_course * math.cos(self.state_est.ang_course)
+        robot_vy = self.state_est.v_course * math.sin(self.state_est.ang_course)
+        robot_v = np.array([robot_vx, robot_vy])
+        course_speed = math.sqrt(np.dot(robot_v,robot_v))
 
         if distance <= self.dist_threshold or self.des_reached:
             # if self.des_reached == False: # Just print the first time destination reached
@@ -277,10 +291,16 @@ class ASV_robot:
             self.last_ang_error2 = self.last_ang_error
             self.last_uL = uL
             self.last_uR = uR
-            u_nom = 150
-            uR = uR * 100
-            uL = uL * 100
+            # u_nom = 150
+            # uR = uR * 100
+            # uL = uL * 100
             
+            u_nom = (speed_des - course_speed) * self.Kp_nom + 100
+            # print("u_nom: ", u_nom)
+            # print("current speed: ", self.state_est.v_course)
+            uL = uL * 50
+            uR = uR * 50
+
             ### Kinetic Model (not working)
             # e_x = des_point.x - self.state_est.x 
             # e_y = des_point.y - self.state_est.y
@@ -394,8 +414,8 @@ class ASV_robot:
             self.last_uL = uL
             self.last_uR = uR
             u_nom = (speed_des - course_speed) * self.Kp_nom + 100
-            print("u_nom: ", u_nom)
-            print("current speed: ", self.state_est.v_course)
+            # print("u_nom: ", u_nom)
+            # print("current speed: ", self.state_est.v_course)
             uL = uL * 50
             uR = uR * 50
             # if uR > 0:
@@ -465,7 +485,8 @@ class ASV_robot:
     def xbee_callback(self, xbee_message):
         data = xbee_message.data.decode()
         parsed_data = data.split(',')
-        print(data)
+        if self.mission_debug:
+            print(data)
         if parsed_data[0] == "!QUIT":
             self.terminate = True
             print("Stop message received. Terminating...")
@@ -513,7 +534,7 @@ class ASV_robot:
             if self.terminate == False:
                 average_depth = sum(self.depths)/len(self.depths)
                 current_speed = math.sqrt(self.v_boat[0]**2 + self.v_boat[1]**2)
-                msg = "!DATA, %f, %f, %f, %f, %f, %f" % (self.state_est.x, self.state_est.y, self.heading, average_depth, current_speed)
+                msg = "!DATA, %f, %f, %f, %f, %f" % (self.state_est.x, self.state_est.y, self.heading, average_depth, current_speed)
                 msg_binary = msg.encode()
                 self.environment.my_xbee.send_data_async(self.environment.dest_xbee, msg_binary)
 
@@ -525,7 +546,7 @@ class ASV_robot:
             if self.terminate == True:
                 break
             else:
-                print("Checking")
+                # print("Checking")
                 try:
                     self.environment.my_xbee.send_data(self.environment.dest_xbee, b'Hi')
                     bad_count = 0
@@ -601,7 +622,7 @@ class ASV_robot:
                 self.state_est.x = self.utm_x
                 self.state_est.y = self.utm_y
                 self.GPS_received = True
-                print('GPS: ', self.state_est.x, self.state_est.y)
+                # print('GPS: ', self.state_est.x, self.state_est.y)
         elif raw_msg[0] == '$GPVTG':
             # print(raw_msg)
             if len(raw_msg) < 10:
@@ -705,7 +726,7 @@ class ASV_robot:
         all_data = b'\x7f\x7f' + num_bytes + data + checksum
         # self.adcp_f.write(all_data)
 
-        current_state = [self.state_est.x, self.state_est.y, self.state_est.theta, self.state_est.roll, self.state_est.pitch]
+        current_state = [self.state_est.x, self.state_est.y, self.state_est.theta, self.state_est.roll, self.state_est.pitch, self.state_est.v_course, self.state_est.ang_course]
         current_state_str = "$STATE," + ",".join(map(str,current_state)) + "###"
         
         # Data Logging
