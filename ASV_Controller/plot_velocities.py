@@ -18,7 +18,9 @@ sigma_offset = 0.6142
 BEAM_ANGLE = 20 #degrees
 TRANSDUCER_OFFSET = 0.1 #m
 
-data_file = "Log/lake_7-27/ALL_18-07-12 06.49.05.bin"
+data_file = "Log/lake_7-27/ALL_18-07-12 06.49.05.bin" # Lake
+# data_file = "Log/river_7-27/ALL_18-07-12 06.47.41.bin" # River
+
 
 def read_ADCP_file(data):
     depths = []
@@ -89,41 +91,41 @@ def main():
 
     min_depth = Z.min()
 
-    #Normalize positions
-    min_x = min(ASV_X)
-    min_y = min(ASV_Y)
-    X = [v - min_x for v in ASV_X]
-    Y = [v - min_y for v in ASV_Y]
-    max_x = max(X)
-    max_y = max(Y)
+    # #Normalize positions
+    # min_x = min(ASV_X)
+    # min_y = min(ASV_Y)
+    # X = [v - min_x for v in ASV_X]
+    # Y = [v - min_y for v in ASV_Y]
+    # max_x = max(X)
+    # max_y = max(Y)
 
     # Method 0: 1D Kalman Filter
-    m = int(np.ceil(max_x/CELL_RES))
-    n = int(np.ceil(max_y/CELL_RES))
-    baseFloor = min_depth
-    B = baseFloor*np.ones((m,n))
-    Bvar = np.zeros((m,n))
+    # m = int(np.ceil(max_x/CELL_RES))
+    # n = int(np.ceil(max_y/CELL_RES))
+    # baseFloor = min_depth
+    # B = baseFloor*np.ones((m,n))
+    # Bvar = np.zeros((m,n))
 
-    for t in range(len(ASV_X)):
-        cur_x = X[t]
-        cur_y = Y[t]
-        cur_alt = Z[t]
+    # for t in range(len(ASV_X)):
+    #     cur_x = X[t]
+    #     cur_y = Y[t]
+    #     cur_alt = Z[t]
 
-        i = int(np.floor(cur_x/CELL_RES))
-        j = int(np.floor(cur_y/CELL_RES))
+    #     i = int(np.floor(cur_x/CELL_RES))
+    #     j = int(np.floor(cur_y/CELL_RES))
 
-        for k in range(max(0,i-win), min(m, i+win)):
-            for l in range(max(0,j-win), min(n,j+win)):
-                dist2 = 0.1+CELL_RES*((k-i)**2+(l-j)**2)**0.5
+    #     for k in range(max(0,i-win), min(m, i+win)):
+    #         for l in range(max(0,j-win), min(n,j+win)):
+    #             dist2 = 0.1+CELL_RES*((k-i)**2+(l-j)**2)**0.5
                     
-                if B[k][l] == baseFloor:
-                    B[k][l] = cur_alt
-                    Bvar[k][l] = (dist2*sigma_slope+sigma_offset)**2
-                else:
-                    var = (dist2*sigma_slope+sigma_offset)**2
-                    cur_K = float(Bvar[k][l])/(Bvar[k][l] + var)
-                    B[k][l] = B[k][l]+cur_K*(cur_alt - B[k][l])
-                    Bvar[k][l] = Bvar[k][l]-cur_K*Bvar[k][l];
+    #             if B[k][l] == baseFloor:
+    #                 B[k][l] = cur_alt
+    #                 Bvar[k][l] = (dist2*sigma_slope+sigma_offset)**2
+    #             else:
+    #                 var = (dist2*sigma_slope+sigma_offset)**2
+    #                 cur_K = float(Bvar[k][l])/(Bvar[k][l] + var)
+    #                 B[k][l] = B[k][l]+cur_K*(cur_alt - B[k][l])
+    #                 Bvar[k][l] = Bvar[k][l]-cur_K*Bvar[k][l];
 
     ###########################################################################
     # PLOTS
@@ -167,6 +169,7 @@ def main():
         # if robot is moving at greater than 10 meters/s 
         if np.linalg.norm(bt_velocties[i]) > 10000:
             bad_bt_data.append(True)
+
         else:
             bad_bt_data.append(False)
         bad_rel_data.append([])
@@ -177,24 +180,84 @@ def main():
                 bad_rel_data[i].append(False)
     print(bad_rel_data)
 
+    ### RAW Surface Velocities
     # Relative Surface Velocities
     v_sur_rel = [vel[0] for vel in relative_velocities]
-    vx_sur_rel = filter(lambda x[v[0] for v in v_sur_rel]
-    vy_sur_rel = [v[1] for v in v_sur_rel]
+    # bad_sur_rel = [bad[0] for bad in bad_rel_data]
+    vx_sur_rel = np.asarray([v[0] for v in v_sur_rel])
+    vy_sur_rel = np.asarray([v[1] for v in v_sur_rel])
 
     # Boat Velocities 
     v_boat = bt_velocties
-    vx_boat = [v[0] for v in v_boat]
-    vy_boat = [v[1] for v in v_boat]
+    vx_boat = np.asarray([v[0] for v in v_boat])
+    vy_boat = np.asarray([v[1] for v in v_boat])
 
-    plt.figure()
-    plt.quiver(ASV_X, ASV_Y, vx_sur_rel, vy_sur_rel)
-    plt.title('Relative Velocities')
 
-    plt.figure()
-    plt.quiver(ASV_X, ASV_Y, vx_boat, vy_boat)
-    plt.title('Boat Velocities')
-    plt.show()
+    ### Kalman Filtered Surface Velocities
+    
+    #Normalize positions
+    min_x = min(ASV_X)
+    min_y = min(ASV_Y)
+    X = [v - min_x for v in ASV_X]
+    Y = [v - min_y for v in ASV_Y]
+    max_x = max(X)
+    max_y = max(Y)
+
+    min_current = 0
+    # 1D Kalman Filter
+    m = int(np.ceil(max_x/CELL_RES)) # Define number of cells
+    n = int(np.ceil(max_y/CELL_RES))
+    vx_current_min = 0
+    vy_current_min = 0
+    B_vx = vx_current_min*np.ones((m,n)) # initiliaze current velocities for each cell
+    B_vy = vy_current_min*np.ones((m,n))
+    B_vx_var = np.zeros((m,n))
+    B_vy_var = np.zeros((m,n))
+
+    for t in range(len(ASV_X)):
+        cur_x = X[t]
+        cur_y = Y[t]
+        cur_alt = Z[t]
+
+        i = int(np.floor(cur_x/CELL_RES)) # find which cell we're in
+        j = int(np.floor(cur_y/CELL_RES))
+
+        # loop over a defined window
+        for k in range(max(0,i-win), min(m, i+win)):
+            for l in range(max(0,j-win), min(n,j+win)):
+                # find from current cell to that cell
+                dist2 = 0.1+CELL_RES*((k-i)**2+(l-j)**2)**0.5
+                
+                # if this is first time updating this cell...
+                # set the cell value to current readings
+                if B[k][l] == baseFloor:
+                    B_vx[k][l] = cur_alt
+                    # Calcualte error 
+                    B_vx_var[k][l] = (dist2*sigma_slope+sigma_offset)**2
+                    B_vy_var[k][l] = (dist2*sigma_slope+sigma_offset)**2
+                else:
+                    var = (dist2*sigma_slope+sigma_offset)**2
+                    cur_K = float(Bvar[k][l])/(Bvar[k][l] + var)
+                    B[k][l] = B[k][l]+cur_K*(cur_alt - B[k][l])
+                    Bvar[k][l] = Bvar[k][l]-cur_K*Bvar[k][l];
+
+
+    # Plotting
+    # plt.figure()
+    # plt.quiver(ASV_X, ASV_Y, vx_sur_rel, vy_sur_rel)
+    # plt.title('Relative Surface Velocities')
+
+    # plt.figure()
+    # plt.quiver(ASV_X, ASV_Y, vx_boat, vy_boat)
+    # plt.title('Boat Velocities')
+
+    # plt.figure()
+    # Q = plt.quiver(ASV_X, ASV_Y, vx_sur_rel - vx_boat, vy_sur_rel - vy_boat, pivot='tip', scale=1000)
+    # qk = plt.quiverkey(Q, 0.9, 0.9, 1, r'$1 \frac{m}{s}$', labelpos='E',
+    #                coordinates='figure')
+    # plt.scatter(ASV_X, ASV_Y, color='k', s=5)
+    # plt.title('Absolute Velocities')
+    # plt.show()
 
 if __name__ == '__main__':
     main()
