@@ -13,8 +13,9 @@ class ASV_environment:
         self.GPS_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDEF-if00-port0' #Pi ADCP
         self.XBEE_PORT = '/dev/serial/by-id/usb-FTDI_FT231X_USB_UART_DN02Z3LX-if00-port0'
         self.ADCP_PORT = '/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_D-if00-port0'
-        self.mag_port = '/dev/serial/by-id/usb-Teensyduino_USB_Serial_2770350-if00'
-        # self.mag_port = '/dev/tty.usbmodem2770351'
+        # self.mag_port = '/dev/serial/by-id/usb-Teensyduino_USB_Serial_2770350-if00'
+        # self.mag_port = '/dev/tty.usbmodem1421'
+        self.arduino_port = '/dev/serial/by-id/...' #TODO: update this
         self.starboard_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VW9AR-if00-port0'
         self.port_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDWP-if00-port0'
         self.servo_PORT = ''
@@ -26,15 +27,14 @@ class ASV_environment:
         self.starboard_ser = None
         self.port_ser = None
         self.ADCP_ser = None
-        self.mag_ser = None # magnetometer
+        # self.mag_ser = None # magnetometer
+        self.arduino_ser = None
         self.xbee_network = None
         self.disable_xbee = True
 
         # Create serial port
         self.robot_mode = "HARDWARE MODE" # HARDWARE MODE
                 
-
-
     def setup_GPS(self):
         self.GPS_ser = serial.Serial(self.GPS_PORT, bytesize = 8)
         self.GPS_ser.baudrate = 19200
@@ -49,9 +49,17 @@ class ASV_environment:
         self.port_ser = serial.Serial(self.port_PORT, 115200)
         self.starboard_ser = serial.Serial(self.starboard_PORT, 115200)
 
-    def setup_magnetometer(self):
-        self.mag_ser = serial.Serial(self.mag_port, 9600)
-        # self.mag_ser.flushInput()
+    def setup_arduino(self):
+        self.arduino_ser = serial.Serial(self.mag_port, 9600)
+        self.arduino_ser.flushInput()
+
+    def send_servo_command(val):
+        servo_msg = '$%d@' % val
+        self.arduino_ser.write(servo_msg.encode())
+
+    # def setup_magnetometer(self):
+    #     self.mag_ser = serial.Serial(self.mag_port, 9600)
+    #     # self.mag_ser.flushInput()
 
 ###############################################################################
 # ADCP Functions
