@@ -1,17 +1,16 @@
 #include <Servo.h> 
 
-Servo myservo;
+#define SERVOPIN 13
 
+Servo myservo;
+//Servo range: 1195-1834
+//184 is turning right
 void setup() 
 { 
-  myservo.attach(13);
+  myservo.attach(SERVOPIN);
   delay(1000);
-//  myservo.writeMicroseconds(1400);  // set servo to mid-point
-//  delay(1000);
-  myservo.writeMicroseconds(1600);  // set servo to mid-point
-  delay(1000);
-  myservo.writeMicroseconds(1700);
+  myservo.writeMicroseconds(1834);  // set servo to mid-point
 } 
 
 void loop() {
-  } 
+} 
