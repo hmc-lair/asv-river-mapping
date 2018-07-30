@@ -15,7 +15,7 @@ class ASV_environment:
         self.ADCP_PORT = '/dev/serial/by-id/usb-Prolific_Technology_Inc._USB-Serial_Controller_D-if00-port0'
         # self.mag_port = '/dev/serial/by-id/usb-Teensyduino_USB_Serial_2770350-if00'
         # self.mag_port = '/dev/tty.usbmodem1421'
-        self.arduino_port = '/dev/serial/by-id/...' #TODO: update this
+        self.arduino_port = '/dev/serial/by-id/usb-Arduino_Srl_Arduino_Uno_FFFFFFFFFFFF515B2503-if00'
         self.starboard_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VW9AR-if00-port0'
         self.port_PORT = '/dev/serial/by-id/usb-FTDI_USB_Serial_Converter_FT8VWDWP-if00-port0'
         self.servo_PORT = ''
