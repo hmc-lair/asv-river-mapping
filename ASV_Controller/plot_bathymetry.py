@@ -185,22 +185,33 @@ def main():
     plt.plot(mission_X, mission_Y, color='red', marker='.', label='Mission plan')
     plt.legend()
 
-    # 2) Depth surface map
     B_new = np.zeros((n,m))
     for i in range(n):
         for j in range(m):
             B_new[i][j] = B[j][i]
 
     X_plot, Y_plot = np.meshgrid(np.arange(min_x, min_x + m*CELL_RES, CELL_RES), np.arange(min_y, min_y + n*CELL_RES, CELL_RES))
+    
+    # 2) Depth surface map
     ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    surf = ax1.plot_surface(X_plot, Y_plot, B_new, cmap=cm.viridis) #depths
-
-    p = ax1.plot(ASV_X, ASV_Y, np.zeros(len(X)), color='red') #ASV path
+    ax1.plot_surface(X_plot, Y_plot, B_new, cmap=cm.viridis) #depths
+    ax1.plot(ASV_X, ASV_Y, np.zeros(len(X)), color='red') #ASV path
     ax1.view_init(200, -50)
     ax1.set_zlabel('Depth (m)')
     ax1.invert_zaxis()
     ax1.set_xlabel('Easting (m)')
     ax1.set_ylabel('Northing (m)')
+
+    # 3) Scatter plot of raw data
+    ax2 = plt.figure(figsize=(8,6)).gca(projection='3d')
+    ax2.scatter(ASV_X, ASV_Y, Z, c=Z, cmap=cm.viridis)
+    ax2.plot(ASV_X, ASV_Y, np.zeros(len(X)), color='red') #ASV path
+    ax2.view_init(200, -50)
+    ax2.set_zlabel('Depth (m)')
+    ax2.invert_zaxis()
+    ax2.set_xlabel('Easting (m)')
+    ax2.set_ylabel('Northing (m)')
+
     plt.show()
 
 if __name__ == '__main__':

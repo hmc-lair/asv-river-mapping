@@ -20,6 +20,7 @@ int commandIndex = 0;
 
 Servo myservo;
 int servoVal = 1600; // default is straight
+bool shouldFlushPort = true;
 
 /*
  ******************************************************************************
@@ -142,23 +143,29 @@ void loop(void) {
    * Servo control
    ******************************************************************************
    */
+   
    // If there is an incoming reading...
   if (Serial.available() > 0) {
     while(Serial.available() > 0) {
       char currentChar = Serial.read();
       
       if (currentChar == '$') {
+        shouldFlushPort = false;
         // if new command, empty the command buffer and set commandIndex to 0
         commandIndex = 0;
         memset(currentCommand, 0, 20);
         currentCommand[commandIndex] = currentChar;
       } 
       else if (currentChar == '@') {
+         shouldFlushPort = true;
          // Execute the command when @ is recieved 
          // Serial.println(currentCommand);
          servoVal = atoi(currentCommand);
          sendServoCommand(servoVal);
       }
+//      else if (shouldFlushPort) {
+//        flushSerialPort();
+//      }
       else {
          // populate the command until '$'
          currentCommand[commandIndex] = currentChar;
@@ -166,17 +173,12 @@ void loop(void) {
       }
     }
   }
-
-  // Flushing crap
-//  while (Serial.read() >= 0) ;
-//  do 
-//  {
-//    Serial.read();
-//  } while(Serial.available());
-  delay(10);
 }
 
 void sendServoCommand(int val) {
+  Serial.write("$SERVO, ");
+  Serial.write(val);
+  Serial.write("\n");
   if (val >= SERVO_MIN && val <= SERVO_MAX) { // check if valid servo position
 //    Serial.print("Writing to servo...");
 //    Serial.println(val);
@@ -184,4 +186,14 @@ void sendServoCommand(int val) {
   }
   return;
 } 
+
+void flushSerialPort() {
+  // Flushing crap
+  while (Serial.read() >= 0) ;
+  do 
+  {
+    Serial.read();
+  } while(Serial.available());
+  delay(10);
+}
 
