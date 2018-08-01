@@ -50,10 +50,10 @@ class ASV_environment:
         self.starboard_ser = serial.Serial(self.starboard_PORT, 115200)
 
     def setup_arduino(self):
-        self.arduino_ser = serial.Serial(self.mag_port, 9600)
+        self.arduino_ser = serial.Serial(self.arduino_port, 9600)
         self.arduino_ser.flushInput()
 
-    def send_servo_command(val):
+    def send_servo_command(self, val):
         servo_msg = '$%d@' % val
         self.arduino_ser.write(servo_msg.encode())
 

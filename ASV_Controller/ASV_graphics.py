@@ -13,7 +13,7 @@ import math
 
 IMAGE_WIDTH = 600
 IMAGE_HEIGHT = 400
-MAP_FILE = '../Maps/river_7.27.tif'
+MAP_FILE = '../Maps/river_7-27.tif'
 
 # IMAGE_WIDTH = 1000
 # IMAGE_HEIGHT = 700
