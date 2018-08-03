@@ -18,23 +18,26 @@ millikan2 = 'Log/millikan_7-19/ALL_18-07-12 00.16.04.bin' #2) Good
 millikan3 = 'Log/millikan_7-19/ALL_18-07-11 23.36.33.bin' #3) Good
 millikan4 = 'Log/millikan_7-19/ALL_18-07-12 00.24.24.bin' #4) Large range
 
+millikan_new = 'Log/millikan/ALL_18-07-12 08.13.15.bin'
+
 lake1 = 'Log/lake_7-27/ALL_18-07-12 06.49.05.bin'
 
 river1 = 'Log/river_7-27/ALL_18-07-12 06.47.41.bin'
 river2 = 'Log/river_7-27/ALL_18-07-12 06.26.13.bin'
 
-data_file = river1
+data_file = millikan_new
 
 #Mission files
 #TODO: add mission file
-mission_file = 'Missions/river_last.csv'
+mission_file = 'Missions/millikan_real_test.csv'
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
-map_file = '../Maps/river_7-27.tif'
+# map_file = '../Maps/river_7-27.tif'
+map_file = '../Maps/cast.tif'
 
 # Plot parameters
-CELL_RES = 0.5
+CELL_RES = 1
 win = 5
 sigma_slope = 0.1204
 sigma_offset = 0.6142
@@ -115,7 +118,6 @@ def read_mission_file(filename, inv_trans):
         
     return X, Y
 
-
 ###############################################################################
 
 #Read data from 1 trial
@@ -179,8 +181,7 @@ def main():
         X_pix.append(row)
         Y_pix.append(col)
     plt.plot(X_pix, Y_pix, color='black', zorder=2, label='GPS readings')
-
-    #mission wps
+    # mission wps
     mission_X, mission_Y = read_mission_file(mission_file, inv_trans)
     plt.plot(mission_X, mission_Y, color='red', marker='.', label='Mission plan')
     plt.legend()
@@ -190,27 +191,47 @@ def main():
         for j in range(m):
             B_new[i][j] = B[j][i]
 
-    X_plot, Y_plot = np.meshgrid(np.arange(min_x, min_x + m*CELL_RES, CELL_RES), np.arange(min_y, min_y + n*CELL_RES, CELL_RES))
+    X_plot, Y_plot = np.meshgrid(np.arange(min_y, min_y + n*CELL_RES, CELL_RES), np.arange(min_x, min_x + m*CELL_RES, CELL_RES))
     
-    # 2) Depth surface map
+    # # 2) Depth surface map
     ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    ax1.plot_surface(X_plot, Y_plot, B_new, cmap=cm.viridis) #depths
-    ax1.plot(ASV_X, ASV_Y, np.zeros(len(X)), color='red') #ASV path
+    ax1.plot_surface(X_plot, Y_plot, B, cmap=cm.viridis) #depths
+    ax1.plot(ASV_Y, ASV_X, np.zeros(len(X)), color='red') #ASV path
     ax1.view_init(200, -50)
     ax1.set_zlabel('Depth (m)')
     ax1.invert_zaxis()
     ax1.set_xlabel('Easting (m)')
     ax1.set_ylabel('Northing (m)')
 
-    # 3) Scatter plot of raw data
-    ax2 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    ax2.scatter(ASV_X, ASV_Y, Z, c=Z, cmap=cm.viridis)
-    ax2.plot(ASV_X, ASV_Y, np.zeros(len(X)), color='red') #ASV path
-    ax2.view_init(200, -50)
-    ax2.set_zlabel('Depth (m)')
-    ax2.invert_zaxis()
-    ax2.set_xlabel('Easting (m)')
-    ax2.set_ylabel('Northing (m)')
+    # # 3) Scatter plot of raw data
+    # ax2 = plt.figure(figsize=(8,6)).gca(projection='3d')
+    # ax2.scatter(ASV_X, ASV_Y, Z, c=Z, cmap=cm.viridis)
+    # ax2.plot(ASV_X, ASV_Y, np.zeros(len(X)), color='red') #ASV path
+    # ax2.view_init(200, -50)
+    # ax2.set_zlabel('Depth (m)')
+    # ax2.invert_zaxis()
+    # ax2.set_xlabel('Easting (m)')
+    # ax2.set_ylabel('Northing (m)')
+
+    # 4) Gradient plot
+    # Gx, Gy = np.gradient(B_new) # gradients with respect to x and y
+    # G = (Gx**2+Gy**2)**.5  # gradient magnitude
+    
+    # for i in range(len(G)):
+    #     for j in range(len(G[0])):
+    #         if G[i][j] > .4:
+    #             G[i][j] = 0
+    #         G[i][j] *= 4
+
+    # N = G/G.max()  # normalize 0..1
+    # print(G.min(), G.max())
+    # print(N)
+
+    # ax = plt.figure(figsize=(8,6)).gca(projection='3d')
+    # ax.plot_surface(X_plot, Y_plot, B_new, facecolors=cm.viridis(N))
+    # ax.plot(ASV_X, ASV_Y, np.zeros(len(X)), color='red') #ASV path
+    # plt.matshow(G,cmap='viridis')
+    # plt.colorbar()
 
     plt.show()
 
