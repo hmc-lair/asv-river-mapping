@@ -1,11 +1,9 @@
 '''
 path_planner.py
 
-Main function for RRT planner w/ serial expansion
+Main function for ASV RRT planner
 '''
-from __future__ import division
 import time
-import copy
 import numpy as np
 import random as rand
 import matplotlib.pyplot as plt
@@ -41,24 +39,23 @@ def rrtSerial(graph_bool, numCycles, maxTime, numRobots):
 	#Initialize information maps
 	infoMap = maps.createInfoMap(E, m, n)
 
-	masterMap = infoMap #store original map to insulate it from changes within an iteration
 	if graph_bool:
 		plt.matshow(infoMap,cmap='viridis') #show map in path graphing figure
 		plt.colorbar() #infoMap scale for figure
-		print("Done creating maps")
+		print("Done creating maps", m, n)
 
-	original_map_score, maxInfo = maps.scoreInfoMap(infoMap)
+	map_score,_ = maps.scoreInfoMap(infoMap)
 
 	######################################################
 	bestPath = []
 	bestScore = 0
 	bestInfoMap = None
 
-	startState = [] #list of locations to start the bots
-	xcoord = int(INFO_MAP_SIZE*0.85)
-	ycoord = INFO_MAP_SIZE
-	for i in range(numRobots): #generate a set of unique start states
-		startState.append([xcoord, int(((ycoord*.8)*(float(i)/numRobots))+(ycoord*.1))])
+	startState = [[10,0]] #list of locations to start the bots
+	# xcoord = int(INFO_MAP_SIZE*0.85)
+	# ycoord = INFO_MAP_SIZE
+	# for i in range(numRobots): #generate a set of unique start states
+	# 	startState.append([xcoord, int(((ycoord*.8)*(float(i)/numRobots))+(ycoord*.1))])
 
 	for i in range(numBatches):
 		HICs = []
@@ -104,6 +101,7 @@ def rrtSerial(graph_bool, numCycles, maxTime, numRobots):
 			bestPath = bestBatchPath
 
 	endTime = time.time()
+
 	##################################################
 	
 	#Length of bestPath
@@ -115,7 +113,7 @@ def rrtSerial(graph_bool, numCycles, maxTime, numRobots):
 			robotDist += curDist
 		dists.append(robotDist)
 
-	coverage = float(bestScore)/original_map_score
+	coverage = float(bestScore)/map_score
 
 	print("Best % coverage:", coverage)
 	#print "Runtime", endTime - startTime
@@ -132,7 +130,7 @@ def rrtSerial(graph_bool, numCycles, maxTime, numRobots):
 
 	return endTime - startTime, coverage
 
-############################### SERIAL HELPERS ###############################
+############################### HELPER FUNCTIONS ###############################
 
 '''
 Expands parent node and returns the new, expanded node
@@ -149,7 +147,9 @@ def expandNewNode(parent, bins, infoMap, HICs, maxTime, numRobots):
 	rand.shuffle(order)
 	prevExpansions = []
 	for i in order:
-		state = performDive(parent.end[i], i, diveDist, infoMap, HICs, prevExpansions)
+		state = -1
+		while state == -1: #Make sure within boundaries
+			state = performDive(parent.end[i], i, diveDist, infoMap, HICs, prevExpansions)
 		newStates[i] = state
 
 		newVisitedCells = rc.getVisitedCells([parent.end[i]], [state], len(infoMap), len(infoMap[0]))
@@ -160,7 +160,7 @@ def expandNewNode(parent, bins, infoMap, HICs, maxTime, numRobots):
 		#Add to HICs if above threshold
 		if score > HIC_THRES:
 			if ENABLE_HICS:
-				print("HIC", score)
+				# print("HIC", score)
 				HICs.append([parent.end[i], state])
 
 
@@ -206,26 +206,35 @@ def performDive(p_end, i, d, infoMap, HICs, prevExpansions):
 	else: #Towards random bearing
 		theta = rand.uniform(0,2*np.pi)
 
-	# Check if collision
-	if COLLISION_PREV:
-		willCollide = True
-		badThetas = checkCollisions(p_end, prevExpansions)
+	# Collision checking can be re-enabled for multi-robot planning
+	# # Check if collision 
+	# if COLLISION_PREV:
+	# 	willCollide = True
+	# 	badThetas = checkCollisions(p_end, prevExpansions)
 
-		while willCollide:
-			count = 0
-			for t in badThetas:
-				if np.fabs(t-theta) < COLLISION_THRES*np.pi/180:
-					count += 1
-			if count == 0:
-				willCollide = False
-			else:
-				theta = rand.uniform(0,2*np.pi)
+	# 	while willCollide:
+	# 		count = 0
+	# 		for t in badThetas:
+	# 			if np.fabs(t-theta) < COLLISION_THRES*np.pi/180:
+	# 				count += 1
+	# 		if count == 0:
+	# 			willCollide = False
+	# 		else:
+	# 			theta = rand.uniform(0,2*np.pi)
 
-		prevExpansions.append((p_end[0], p_end[1], theta))
+	# 	prevExpansions.append((p_end[0], p_end[1], theta))
 
 	newState = [0,0]
 	newState[0] = d*np.cos(theta) + p_end[0] #X
 	newState[1] = d*np.sin(theta) + p_end[1] #Y
+
+	# TODO: If new point outside of map, don't add
+	if newState[0] >= n or newState[0] < 0:
+		print("outside range", newState[0])
+		return -1
+	if newState[1] >= m or newState[1] < 0:
+		print("outside range", newState[1])
+		return -1
 
 	return newState
 
@@ -300,7 +309,7 @@ def prune(cNew,infoMap):
 	cells_ik = rc.getVisitedCells(c.parent.end, cNew.end, len(infoMap), len(infoMap[0]))
 
 	if c.score <= 1:
-		print("Removing useless")
+		# print("Removing useless")
 		cNew.visitedCells = c.parent.visitedCells.union(cells_ik)
 		c.parent.children.append(cNew)
 		if cNew in c.children:
@@ -315,7 +324,7 @@ def prune(cNew,infoMap):
 		return
 
 	if (O_ik / t_ik) > (O_ijjk / (cNew.time - c.time)):
-		print("Pruning")
+		# print("Pruning")
 		cells_ik = rc.getVisitedCells(c.parent.end, cNew.end, len(infoMap), len(infoMap[0]))
 		cNew.visitedCells = c.parent.visitedCells.union(cells_ik)
 		c.parent.children.append(cNew)
@@ -328,7 +337,7 @@ def prune(cNew,infoMap):
 
 # Test rrt
 def main():
-	numCycles = 1000
+	numCycles = 2000
 	maxTime = 250
 	numRobots = 1
 	rrtSerial(True, numCycles, maxTime, numRobots)

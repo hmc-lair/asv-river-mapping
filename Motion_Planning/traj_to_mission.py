@@ -1,12 +1,17 @@
+'''
+traj_to_mission.py
+
+Convert RRT trajectory (in UTM with map origin) to lat/lon
+'''
 import numpy as np
 import utm
 
 def main():
 	# Files
-	traj_file = 'mission.txt'
-	map_file = 'map.csv'
+	traj_file = 'river_mission1.txt'
+	map_file = 'maps/river_map_gradient.csv'
 
-	mission_file = 'millikan_RRT_test.csv'
+	mission_file = 'river_RRT_test.csv'
 
 	# Load map data
 	f = open(map_file, 'r')

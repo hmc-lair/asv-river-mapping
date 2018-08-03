@@ -28,8 +28,8 @@ DIVE_DEPTH = -3 #HFB
 TURN_RAD = 20 #m
 WATER_DEPTH = 40 #m
 DIVE_ANGLE = 45 #degrees
-MAX_DIVE_LENGTH = 5#20
-MIN_DIVE_LENGTH = 2#5
+MAX_DIVE_LENGTH = 15#20
+MIN_DIVE_LENGTH = 10
 SURF_LENGTH = float(WATER_DEPTH) / math.tan(DIVE_ANGLE*math.pi/180)
 
 #Collision Parameters
@@ -46,5 +46,5 @@ NUM_ANGLE_RANGES = 4
 INFO_MAP_SIZE = 10 #TODO: Fix this
 
 #Maps
-maps.generateGradientMap()
-E, m , n = maps.setupInfoMap('map.csv')
+# maps.generateDepthGradientMaps
+E, m , n = maps.setupInfoMap('maps/river_map_gradient.csv')
