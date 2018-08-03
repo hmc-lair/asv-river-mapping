@@ -12,27 +12,28 @@ import utm
 import gdal
 import struct
 
-sigma = 2 #Gaussian blur for info map
+sigma = 1 #Gaussian blur for info map
 tau = 0.4 #Thresholding
 
 BEAM_ANGLE = 20 #degrees
 TRANSDUCER_OFFSET = 0.1 #m
-SCALING_FACTOR = 10
+SCALING_FACTOR = 30
 
 #ASV log files
-millikan1 = 'Log/millikan_7-19/ALL_18-07-11 23.59.36.bin' #1) GOOD MAP OF MILLIKAN
-millikan2 = 'Log/millikan_7-19/ALL_18-07-12 00.16.04.bin' #2) Good
-millikan3 = 'Log/millikan_7-19/ALL_18-07-11 23.36.33.bin' #3) Good
-millikan4 = 'Log/millikan_7-19/ALL_18-07-12 00.24.24.bin' #4) Large range
+millikan1 = '../ASV_Controller/Log/millikan_7-19/ALL_18-07-11 23.59.36.bin' #1) GOOD MAP OF MILLIKAN
+millikan2 = '../ASV_Controller/Log/millikan_7-19/ALL_18-07-12 00.16.04.bin' #2) Good
+millikan3 = '../ASV_Controller/Log/millikan_7-19/ALL_18-07-11 23.36.33.bin' #3) Good
+millikan4 = '../ASV_Controller/Log/millikan_7-19/ALL_18-07-12 00.24.24.bin' #4) Large range
 
 lake1 = '../ASV_Controller/Log/lake_7-27/ALL_18-07-12 06.49.05.bin'
 river1 = '../ASV_Controller/Log/river_7-27/ALL_18-07-12 06.47.41.bin'
 
-data_file = river1
+data_file = millikan2
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
-map_file = '../Maps/river_7-27.tif'
+# map_file = '../Maps/river_7-27.tif'
+map_file = '../Maps/cast.tif'
 
 # Plot parameters
 CELL_RES = 1
@@ -101,7 +102,7 @@ def read_ADCP_file(data):
 def generateGradientMap():
 	img, inv_trans, geo_trans, MAP_WIDTH, MAP_HEIGHT = load_map(map_file)
 
-	#GPS DATA
+	#GPS Data
 	ASV_X, ASV_Y, Z = read_data_file(data_file, inv_trans)
 
 	if len(ASV_X) != len(Z):
@@ -155,7 +156,8 @@ def generateGradientMap():
 	Gx, Gy = np.gradient(B_new) # gradients with respect to x and y
 	G = (Gx**2+Gy**2)**.5  # gradient magnitude
 	
-	with open('river_map.csv', 'w') as f:
+	with open('map.csv', 'w') as f:
+		f.write(str(min_x) + ',' + str(min_y) + ',' + str(CELL_RES) + '\n')
 		for i in range(len(G)):
 			for j in range(len(G[0])):
 				if G[i][j] > .4:
@@ -171,7 +173,7 @@ def generateGradientMap():
 
 def setupInfoMap(filename):
 	# Load file
-	E = np.loadtxt(open(filename, 'r'), delimiter=',')
+	E = np.loadtxt(open(filename, 'r'), delimiter=',', skiprows=1)
 	m,n = E.shape
 	return E, m, n
 

@@ -18,7 +18,7 @@ ENABLE_HICS = True #turn on/off high info center node selection
 ENABLE_PRUNING = True #turn on/off cutting short inefficient pairs of edges
 ENABLE_ANGLES = False #turn on/off consideration of different cell view angles
 
-HIC_THRES = 50 #score threshold determining whether or not a node is an HIC
+HIC_THRES = 1#50 #score threshold determining whether or not a node is an HIC
 COLLISION_PREV = False
 COLLISION_THRES = 10 #Degrees of cushion on either side
 
@@ -28,8 +28,8 @@ DIVE_DEPTH = -3 #HFB
 TURN_RAD = 20 #m
 WATER_DEPTH = 40 #m
 DIVE_ANGLE = 45 #degrees
-MAX_DIVE_LENGTH = 20
-MIN_DIVE_LENGTH = 5
+MAX_DIVE_LENGTH = 5#20
+MIN_DIVE_LENGTH = 2#5
 SURF_LENGTH = float(WATER_DEPTH) / math.tan(DIVE_ANGLE*math.pi/180)
 
 #Collision Parameters
@@ -43,7 +43,8 @@ ENABLE_SPREAD = True
 NUM_ANGLE_RANGES = 4
 
 #Used to compute robot start position
-INFO_MAP_SIZE = 45 #TODO: Fix this
+INFO_MAP_SIZE = 10 #TODO: Fix this
 
 #Maps
-E, m , n = maps.setupInfoMap('maps/river_map.csv')
+maps.generateGradientMap()
+E, m , n = maps.setupInfoMap('map.csv')
