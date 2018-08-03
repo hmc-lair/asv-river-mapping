@@ -11,17 +11,17 @@ import math
 # IMAGE_HEIGHT = 250.
 # MAP_FILE = '../Maps/cast.tif'
 
-IMAGE_WIDTH = 600
-IMAGE_HEIGHT = 400
-MAP_FILE = '../Maps/river_7.27.tif'
+IMAGE_WIDTH = 200
+IMAGE_HEIGHT = 150
+MAP_FILE = '../Maps/millikan.tif'
+
+# IMAGE_WIDTH = 600
+# IMAGE_HEIGHT = 400
+# MAP_FILE = '../Maps/river_7.27.tif'
 
 # IMAGE_WIDTH = 1000
 # IMAGE_HEIGHT = 700
 # MAP_FILE = '../Maps/lake.tif'
-
-# IMAGE_WIDTH = 300
-# IMAGE_HEIGHT = 200
-# MAP_FILE = '../Maps/river.tif'
 
 MAP_WIDTH = 800
 MAP_HEIGHT = 600
@@ -157,7 +157,7 @@ class ASV_graphics:
         self.Kp_ang_frame.pack(side='left')
         self.Kp_ang_label = Label(self.Kp_ang_frame, anchor='w', text='K_ang').pack(side='left')
         self.Kp_ang = Entry(self.Kp_ang_frame, width=5)
-        self.Kp_ang.insert(END, '20')
+        self.Kp_ang.insert(END, '700')
         self.Kp_ang.pack(side='right')
         self.Kp_nom_frame = Frame(self.Kp_frame)
         self.Kp_nom_frame.pack(side='right')
@@ -178,7 +178,7 @@ class ASV_graphics:
         self.bwd_limit_frame.pack(side='right')
         self.bwd_limit_label = Label(self.bwd_limit_frame, anchor='w', text='Bwd Limit').pack(side='left')
         self.bwd_limit = Entry(self.bwd_limit_frame, width=5)
-        self.bwd_limit.insert(END, '700')
+        self.bwd_limit.insert(END, '500')
         self.bwd_limit.pack(side='right')
 
         # Tracing border
