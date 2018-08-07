@@ -18,23 +18,26 @@ millikan2 = 'Log/millikan_7-19/ALL_18-07-12 00.16.04.bin' #2) Good
 millikan3 = 'Log/millikan_7-19/ALL_18-07-11 23.36.33.bin' #3) Good
 millikan4 = 'Log/millikan_7-19/ALL_18-07-12 00.24.24.bin' #4) Large range
 
+millikan_new = 'Log/millikan/ALL_18-07-12 08.13.15.bin'
+
 lake1 = 'Log/lake_7-27/ALL_18-07-12 06.49.05.bin'
 
 river1 = 'Log/river_7-27/ALL_18-07-12 06.47.41.bin'
-river2 = 'Log/river_7-27/ALL_18-07-12 06.26.13.bin'
+river2 = 'Log/river_7-27/ALL_18-07-12 06.38.10.bin'
 
 data_file = river1
 
 #Mission files
 #TODO: add mission file
-mission_file = 'Missions/river_last.csv'
+# mission_file = 'Missions/millikan_real_test.csv'
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
-map_file = '../Maps/river_7-27.tif'
+map_file = '../Maps/kern_river.tif'
+# map_file = '../Maps/cast.tif'
 
 # Plot parameters
-CELL_RES = 0.5
+CELL_RES = 1
 win = 5
 sigma_slope = 0.1204
 sigma_offset = 0.6142
@@ -74,16 +77,16 @@ def read_data_file(filename, inv_trans):
     #GPS data
     state_data_split = [state.split(b',') for state in state_data]
     all_states = [(float(state[1]), float(state[2])) for state in state_data_split]
-    ASV_X = []
-    ASV_Y = []
+    ASV_nor = []
+    ASV_eas = []
     for x, y in all_states:
-        ASV_X.append(x)
-        ASV_Y.append(y)
+        ASV_nor.append(x)
+        ASV_eas.append(y)
 
     #Water depths
     depths = read_ADCP_file(ADCP_data)
 
-    return np.asarray(ASV_X), np.asarray(ASV_Y), depths
+    return np.asarray(ASV_nor), np.asarray(ASV_eas), depths
 
 def read_ADCP_file(data):
     depths = []
@@ -115,7 +118,6 @@ def read_mission_file(filename, inv_trans):
         
     return X, Y
 
-
 ###############################################################################
 
 #Read data from 1 trial
@@ -123,20 +125,20 @@ def main():
     img, inv_trans, geo_trans, MAP_WIDTH, MAP_HEIGHT = load_map(map_file)
 
     #GPS DATA
-    ASV_X, ASV_Y, Z = read_data_file(data_file, inv_trans)
+    ASV_nor, ASV_eas, Z = read_data_file(data_file, inv_trans)
 
-    if len(ASV_X) != len(Z):
-        print('Size mismatch!', len(ASV_X), len(Z))
-        ASV_X = ASV_X[:-1]
-        ASV_Y = ASV_Y[:-1]
+    if len(ASV_nor) != len(Z):
+        print('Size mismatch!', len(ASV_nor), len(Z))
+        ASV_nor = ASV_nor[:-1]
+        ASV_eas = ASV_eas[:-1]
 
     min_depth = Z.min()
 
     #Normalize positions
-    min_x = min(ASV_X)
-    min_y = min(ASV_Y)
-    X = [v - min_x for v in ASV_X]
-    Y = [v - min_y for v in ASV_Y]
+    min_x = min(ASV_nor)
+    min_y = min(ASV_eas)
+    X = [v - min_x for v in ASV_nor]
+    Y = [v - min_y for v in ASV_eas]
     max_x = max(X)
     max_y = max(Y)
 
@@ -147,7 +149,7 @@ def main():
     B = baseFloor*np.ones((m,n))
     Bvar = np.zeros((m,n))
 
-    for t in range(len(ASV_X)):
+    for t in range(len(ASV_nor)):
         cur_x = X[t]
         cur_y = Y[t]
         cur_alt = Z[t]
@@ -174,43 +176,57 @@ def main():
     imgplot = plt.imshow(img)
     X_pix = []
     Y_pix = []
-    for i in range(len(ASV_X)): #translate from UTM to pixel coordinates
-        row,col = gdal.ApplyGeoTransform(inv_trans, ASV_X[i], ASV_Y[i])
+    for i in range(len(ASV_nor)): #translate from UTM to pixel coordinates
+        row,col = gdal.ApplyGeoTransform(inv_trans, ASV_nor[i], ASV_eas[i])
         X_pix.append(row)
         Y_pix.append(col)
     plt.plot(X_pix, Y_pix, color='black', zorder=2, label='GPS readings')
+    # mission wps
+    # mission_X, mission_Y = read_mission_file(mission_file, inv_trans)
+    # plt.plot(mission_X, mission_Y, color='red', marker='.', label='Mission plan')
+    # plt.legend()
 
-    #mission wps
-    mission_X, mission_Y = read_mission_file(mission_file, inv_trans)
-    plt.plot(mission_X, mission_Y, color='red', marker='.', label='Mission plan')
-    plt.legend()
-
-    B_new = np.zeros((n,m))
-    for i in range(n):
-        for j in range(m):
-            B_new[i][j] = B[j][i]
-
-    X_plot, Y_plot = np.meshgrid(np.arange(min_x, min_x + m*CELL_RES, CELL_RES), np.arange(min_y, min_y + n*CELL_RES, CELL_RES))
+    X_plot, Y_plot = np.meshgrid(np.arange(min_y, min_y + n*CELL_RES, CELL_RES), np.arange(min_x, min_x + m*CELL_RES, CELL_RES))
     
     # 2) Depth surface map
     ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    ax1.plot_surface(X_plot, Y_plot, B_new, cmap=cm.viridis) #depths
-    ax1.plot(ASV_X, ASV_Y, np.zeros(len(X)), color='red') #ASV path
+    ax1.plot_surface(X_plot, Y_plot, B, cmap=cm.viridis) #depths
+    ax1.plot(ASV_eas, ASV_nor, np.zeros(len(X)), color='red') #ASV path
     ax1.view_init(200, -50)
     ax1.set_zlabel('Depth (m)')
     ax1.invert_zaxis()
     ax1.set_xlabel('Easting (m)')
     ax1.set_ylabel('Northing (m)')
 
-    # 3) Scatter plot of raw data
-    ax2 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    ax2.scatter(ASV_X, ASV_Y, Z, c=Z, cmap=cm.viridis)
-    ax2.plot(ASV_X, ASV_Y, np.zeros(len(X)), color='red') #ASV path
-    ax2.view_init(200, -50)
-    ax2.set_zlabel('Depth (m)')
-    ax2.invert_zaxis()
-    ax2.set_xlabel('Easting (m)')
-    ax2.set_ylabel('Northing (m)')
+    # # 3) Scatter plot of raw data
+    # ax2 = plt.figure(figsize=(8,6)).gca(projection='3d')
+    # ax2.scatter(ASV_nor, ASV_eas, Z, c=Z, cmap=cm.viridis)
+    # ax2.plot(ASV_nor, ASV_eas, np.zeros(len(X)), color='red') #ASV path
+    # ax2.view_init(200, -50)
+    # ax2.set_zlabel('Depth (m)')
+    # ax2.invert_zaxis()
+    # ax2.set_xlabel('Easting (m)')
+    # ax2.set_ylabel('Northing (m)')
+
+    # 4) Gradient plot
+    # Gx, Gy = np.gradient(B_new) # gradients with respect to x and y
+    # G = (Gx**2+Gy**2)**.5  # gradient magnitude
+    
+    # for i in range(len(G)):
+    #     for j in range(len(G[0])):
+    #         if G[i][j] > .4:
+    #             G[i][j] = 0
+    #         G[i][j] *= 4
+
+    # N = G/G.max()  # normalize 0..1
+    # print(G.min(), G.max())
+    # print(N)
+
+    # ax = plt.figure(figsize=(8,6)).gca(projection='3d')
+    # ax.plot_surface(X_plot, Y_plot, B_new, facecolors=cm.viridis(N))
+    # ax.plot(ASV_nor, ASV_eas, np.zeros(len(X)), color='red') #ASV path
+    # plt.matshow(G,cmap='viridis')
+    # plt.colorbar()
 
     plt.show()
 
