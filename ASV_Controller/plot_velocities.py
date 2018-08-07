@@ -17,16 +17,22 @@ from read_asv_data import read_ensemble
 # Plot parameters
 CELL_RES = 0.5
 Z_CELL_RES = 0.06
-sigma_slope = 2
+sigma_slope = 0.5
 sigma_offset = 0.6142
 win = 5
-z_win = 1
-BEAM_ANGLE = 20 #degrees
+z_win = 2
 TRANSDUCER_OFFSET = 0.1 #m
+BEAM_ANGLE = 20 #degrees
 
-# data_file = "Log/lake_7-27/ALL_18-07-12 06.49.05.bin" # Lake
-data_file = "Log/river_7-27/ALL_18-07-12 06.47.41.bin" # River
+
+# data_file = "Log/_7-27/ALL_18-07-12 06.47.41.bin" # River
+data_file = "Log/DATA_18-07-12 06.47.41.csv" #River
 map_file = '../Maps/river_7-27.tif'
+
+# data_file = "Log/DATA_18-07-12 06.49.05.csv" ##lake
+# map_file = '../Maps/lake_7-27.tif'
+
+surface_output_file = 'Log/SURFACE.csv'
 
 def load_map(filename):
     dataset = gdal.Open(filename)
@@ -100,8 +106,14 @@ def main():
     ########################## Reading Data ##########################
     print("Reading data...")
     # Note: Velocities are in millimeters per second
-    ASV_X, ASV_Y, Z, depth_cell_length, relative_velocities, bt_velocties = read_data_file(data_file)
-
+    # ASV_X, ASV_Y, Z, depth_cell_length, relative_velocities, bt_velocties = read_data_file(data_file)
+    all_data = np.load(data_file)
+    ASV_X = all_data[0]
+    ASV_Y = all_data[1]
+    Z = all_data[2]
+    depth_cell_length = all_data[3]
+    relative_velocities = all_data[4]
+    bt_velocties = all_data[5]
 
     if len(ASV_X) != len(Z):
         print('Size mismatch!', len(ASV_X), len(Z))
@@ -146,6 +158,7 @@ def main():
                     cur_K = float(Bvar[k][l])/(Bvar[k][l] + var)
                     B[k][l] = B[k][l]+cur_K*(cur_alt - B[k][l])
                     Bvar[k][l] = Bvar[k][l]-cur_K*Bvar[k][l];
+    
     B_new = np.zeros((n,m))
     for i in range(n):
         for j in range(m):
@@ -160,12 +173,12 @@ def main():
     v_boat = bt_velocties
     vx_boat = np.asarray([v[0] for v in v_boat])
     vy_boat = np.asarray([v[1] for v in v_boat])
+    vz_boat = np.asarray([v[2] for v in v_boat])
 
     # Absolute Velocities
     vx_sur_abs = (vx_sur_rel - vx_boat) * 0.001
     vy_sur_abs = (vy_sur_rel - vy_boat) * 0.001
     v_speed = np.sqrt(vx_sur_abs**2 + vy_sur_abs**2)
-    print(max(v_speed))
 
     #################################  3D Kalman Filter #########################
     print("Starting Kalman Filtering")
@@ -218,11 +231,12 @@ def main():
 
             cur_vx = (relative_velocities[t][d][0] - vx_boat[t]) * 0.001
             cur_vy = (relative_velocities[t][d][1] - vy_boat[t]) * 0.001
-            cur_vz = relative_velocities[t][d][2] * 0.001
+            cur_vz = (relative_velocities[t][d][2] - vz_boat[t]) * 0.001
 
             i = int(np.floor(cur_x/CELL_RES)) # find which cell we're in
             j = int(np.floor(cur_y/CELL_RES))
             k = int(np.floor(cur_z/Z_CELL_RES))
+
             # Do not compute if the readings are bad
             if abs(cur_vx) > 10 or abs(cur_vy) > 10 or abs(cur_vz) > 10:
                 # Filter out bad data
@@ -233,18 +247,20 @@ def main():
                     for b in range(max(0,j-win), min(n,j+win)):
                         for c in range(max(0,k-z_win), min(l, k+z_win)):
                             if (c * Z_CELL_RES > max_depth):
+                                # print(a,b,c)
                                 # find from current cell to that cell
                                 dist2 = 0.1+CELL_RES*((a-i)**2+(b-j)**2 + (c-k)**2 )**0.5
                                 # if this is first time updating this cell...
                                 # set the cell value to current readings
+                                # print(cur_vx)
                                 if B_vx[a,b,c] == vx_current_min:
                                     B_vx[a,b,c] = cur_vx
-                                    B_vy[a,b,c] = cur_vy
-                                    B_vz[a,b,c] = cur_vz
-                                    
-                                    # Calcualte error (related to distance)
                                     B_vx_var[a,b,c] = (dist2*sigma_slope+sigma_offset)**2
+                                elif B_vy[a,b,c] == vy_current_min:
+                                    B_vy[a,b,c] = cur_vy
                                     B_vy_var[a,b,c] = (dist2*sigma_slope+sigma_offset)**2
+                                elif B_vz[a,b,c] == vz_current_min:
+                                    B_vz[a,b,c] = cur_vz
                                     B_vz_var[a,b,c] = (dist2*sigma_slope+sigma_offset)**2
                                 else:
                                     # Current Error for the cell
@@ -252,6 +268,7 @@ def main():
                                     cur_Kx = float(B_vx_var[a,b,c])/(B_vx_var[a,b,c] + var)
                                     cur_Ky = float(B_vy_var[a,b,c])/(B_vy_var[a,b,c] + var)
                                     cur_Kz = float(B_vz_var[a,b,c])/(B_vz_var[a,b,c] + var)
+
                                     B_vx[a,b,c] = B_vx[a,b,c]+cur_Kx*(cur_vx - B_vx[a,b,c])
                                     B_vy[a,b,c] = B_vy[a,b,c]+cur_Ky*(cur_vy - B_vy[a,b,c])
                                     B_vz[a,b,c] = B_vz[a,b,c]+cur_Kz*(cur_vz - B_vz[a,b,c])
@@ -261,22 +278,28 @@ def main():
                                     B_vz_var[a,b,c] = B_vz_var[a,b,c]-cur_Kz*B_vz_var[a,b,c]
                                     
     # Flip
+    B_vx_new = B_vx
+    B_vy_new = B_vy
+    B_vz_new = B_vz
     B_vx_new = np.zeros((n,m,l))
     B_vy_new = np.zeros((n,m,l))
     B_vz_new = np.zeros((n,m,l))
     for i in range(n):
         for j in range(m):
-            B_vx_new[i,j,:] = B_vx[j,i,:]
-            B_vy_new[i,j,:] = B_vy[j,i,:]
-            B_vz_new[i,j,:] = B_vz[j,i,:]
+            B_vx_new[i,j] = B_vx[j,i]
+            B_vy_new[i,j] = B_vy[j,i]
+            B_vz_new[i,j] = B_vz[j,i]
 
     y_axis = np.arange(min_y, min_y + n*CELL_RES, CELL_RES)
     x_axis = np.arange(min_x, min_x + m*CELL_RES, CELL_RES)
     z_axis = -np.arange(min_z, min_z + l*Z_CELL_RES, Z_CELL_RES)
     X_plot, Y_plot, Z_plot = np.meshgrid(x_axis, y_axis, z_axis)
 
+    # Save the unfiltered coordinate before other invalids got turn 
+    # into nans
     x_unfiltered = X_plot
     y_unfiltered = Y_plot
+
     # Filter out zero vectors
     mask = np.logical_or(B_vx_new != 0, B_vy_new != 0, B_vz_new != 0)
     X_plot = np.where(mask, X_plot, np.nan)
@@ -294,13 +317,13 @@ def main():
     ################################ Plotting Data ######################
 
     ####### Fig 1: Ugh Awful 3D Views
-    fig = plt.figure()
-    ax = fig.gca(projection='3d')
-    Q=plt.quiver(X_plot[::skip], Y_plot[::skip], Z_plot[::skip], B_vx_new[::skip], B_vy_new[::skip], B_vz_new[::skip], cmap="coolwarm", length = 0.08)
-    Q.set_array(np.ravel(B_speed[0,:][::skip]))
-    plt.colorbar(Q,extend='both')
-    plt.axis('equal')
-    plt.title("Filtered 3D Velocities")
+    # fig = plt.figure()
+    # ax = fig.gca(projection='3d')
+    # Q=plt.quiver(X_plot[::skip], Y_plot[::skip], Z_plot[::skip], B_vx_new[::skip], B_vy_new[::skip], B_vz_new[::skip], cmap="coolwarm", length = 0.08)
+    # Q.set_array(np.ravel(B_speed[0,:][::skip]))
+    # plt.colorbar(Q,extend='both')
+    # plt.axis('equal')
+    # plt.title("Filtered 3D Velocities")
 
     ####### Fig 2: Top Velocity View
     fig2 = plt.figure()
@@ -313,52 +336,45 @@ def main():
     plt.ylabel("UTM Northing (meters)")
 
     ####### Fig 3: Top Velocity View with Map
-    fig3 = plt.figure()
-    imgplot = plt.imshow(img)
+    # fig3 = plt.figure()
+    # imgplot = plt.imshow(img)
 
-    # Translate ASV path xy
-    X_auv_pix = []
-    Y_auv_pix = []
-    for i in range(len(ASV_X)): #translate from UTM to pixel coordinates
-        row,col = gdal.ApplyGeoTransform(inv_trans, ASV_X[i], ASV_Y[i])
-        X_auv_pix.append(row)
-        Y_auv_pix.append(col)
-    plt.plot(X_auv_pix, Y_auv_pix, color='black', zorder=2, label='GPS readings')
+    # # Translate ASV path xy
+    # X_auv_pix = []
+    # Y_auv_pix = []
+    # for i in range(len(ASV_X)): #translate from UTM to pixel coordinates
+    #     row,col = gdal.ApplyGeoTransform(inv_trans, ASV_X[i], ASV_Y[i])
+    #     X_auv_pix.append(row)
+    #     Y_auv_pix.append(col)
+    # plt.plot(X_auv_pix, Y_auv_pix, color='black', zorder=2, label='GPS readings')
 
     # Translate Velocity x, y
-    x_surface = X_plot[:,:,0]
-    y_surface = Y_plot[:,:,0]
-    x_pix = np.ones(np.shape(x_surface))
-    y_pix = np.ones(np.shape(x_surface))
-    for i in range(len(x_surface)): # translate velocity xy into pixel o=coordinates
-        for j in range(len(x_surface[0])):
-            x_pix[i,j], y_pix[i,j] = gdal.ApplyGeoTransform(inv_trans, x_surface[i,j], y_surface[i,j])
-    
-    Q=plt.quiver(x_pix, y_pix, B_vx_new[:,:,0], B_vy_new[:,:,0], cmap="coolwarm")
-    Q.set_array(np.ravel(B_speed[:,:,0]))
-    plt.colorbar(Q,extend='both')
-    plt.title("Filtered Surface Velocities with Map Underlay")
-    plt.xlabel("UTM Easting (meters)")
-    plt.ylabel("UTM Northing (meters)")
+    x_surface = x_unfiltered[:,:,0]
+    y_surface = y_unfiltered[:,:,0]
 
     ##### Fig 4: Top Raw Data
-    fig4 = plt.figure()
-    mask = v_speed <= 10 # filtered out speed higher than 10 meters per second
-    X = ASV_X[mask]
-    Y = ASV_Y[mask]
-    vx_sur_abs = vx_sur_abs[mask]
-    vy_sur_abs = vy_sur_abs[mask]
-    v_speed = v_speed[mask]
-    Q = plt.quiver(ASV_X, ASV_Y, vx_sur_abs, vy_sur_abs, cmap="coolwarm")
-    Q.set_array(np.ravel(v_speed))
-    plt.colorbar(Q,extend='both')
-    plt.title('Raw Surface Velocities')
-    plt.xlabel("UTM Easting (meters)")
-    plt.ylabel("UTM Northing (meters)")
+    # fig4 = plt.figure()
+    # mask = v_speed <= 10 # filtered out speed higher than 10 meters per second
+    # X = ASV_X[mask]
+    # Y = ASV_Y[mask]
+    # vx_sur_abs = vx_sur_abs[mask]
+    # vy_sur_abs = vy_sur_abs[mask]
+    # v_speed = v_speed[mask]
+    # Q = plt.quiver(ASV_X, ASV_Y, vx_sur_abs, vy_sur_abs, cmap="coolwarm")
+    # Q.set_array(np.ravel(v_speed))
+    # plt.colorbar(Q,extend='both')
+    # plt.title('Raw Surface Velocities')
+    # plt.xlabel("UTM Easting (meters)")
+    # plt.ylabel("UTM Northing (meters)")
 
     ##### Fig 5: Depth Data
     fig5 = plt.figure()
     C = plt.pcolormesh(x_unfiltered[:,:,0],y_unfiltered[:,:,0], B_new, cmap=cm.viridis)
+
+    print("B_new shape: ", np.shape(B_new))
+    print("Y_surface shape: ", np.shape(y_surface))
+    print("Y_unfiltered shape: ", np.shape(y_unfiltered))
+
     plt.colorbar(C,extend='both')
     Q = plt.quiver(x_surface, y_surface, B_vx_new[:,:,0], B_vy_new[:,:,0], cmap="coolwarm")
     Q.set_array(np.ravel(B_speed[:,:,0]))
@@ -366,7 +382,57 @@ def main():
     plt.title('Filtered Velocities with Depth Underlay')
     plt.xlabel("UTM Easting (meters)")
     plt.ylabel("UTM Northing (meters)")
+
+    ##### Fig 6: Cross Sectional depth. Slice across-X (constant Y)
+    cross_sec_depth = plt.figure()
+    y_index = 40
+    y_value = y_unfiltered[y_index, 0, 0]
+    P = plt.plot(x_unfiltered[y_index, :, 0], B_new[y_index, :])
+    plt.title('X cross sectional view of depth map. Y = ' + str(y_value))
+    plt.xlabel('X (meters)')
+    plt.ylabel('Z (meters)')
+
+    ##### Fig 7: Cross Sectional depth. Slice across-Y (constant X)
+    cross_sec_depth = plt.figure()
+    x_index = 30
+    x_value = x_unfiltered[0, x_index, 0]
+    P = plt.plot(y_unfiltered[:, x_index, 0], B_new[:,x_index])
+    plt.title('Y cross sectional view of depth map. X = ' + str(x_value))
+    plt.xlabel('Y (meters)')
+    plt.ylabel('Z (meters)')
+
+    ##### Fig 8: Cross Sectional depth + Current Intensity (Constant Y)
+    cross_v_fig = plt.figure()
+    C = plt.pcolormesh(X_plot[y_index,:,:], Z_plot[y_index,:,:], B_speed[y_index,:,:], vmax = 2.5)
+    Q=plt.quiver(X_plot[y_index,:,:], Z_plot[y_index,:,:], B_vx_new[y_index,:,:], B_vz_new[y_index,:,:])
+    P = plt.plot(x_unfiltered[y_index, :, 0], B_new[y_index, :])
+    plt.colorbar(C,extend='both')
+    plt.title('X cross sectional view of depth map. Y = ' + str(y_value))
+    plt.xlabel('X (meters)')
+    plt.ylabel('Z (meters)')
+
+    # C = plt.pcolormesh(x_unfiltered[:,:,0],y_unfiltered[:,:,0], B_new, cmap=cm.viridis)
+
+    ##### Fig 9: Cross Sectional depth + Current Intensity (Constant Y)
+    cross_v_fig = plt.figure()
+    C = plt.pcolormesh(Y_plot[:,x_index,:], Z_plot[:,x_index,:], B_speed[:,x_index,:])
+    Q=plt.quiver(Y_plot[:,x_index,:], Z_plot[:,x_index,:], B_vy_new[:,x_index,:], B_vz_new[:,x_index,:])
+    P = plt.plot(y_unfiltered[:, x_index, 0], B_new[:,x_index])
+    plt.title('Y cross sectional view of depth map. X = ' + str(x_value))
+    plt.xlabel('Y (meters)')
+    plt.ylabel('Z (meters)')
+    plt.colorbar(C,extend='both')
+
+    # print(B_vy_new[:,0,:].shape)
+    # print(relative_velocities)
+
     plt.show()
+
+    #### Writing to file
+    
+    # Output surface velocities
+    sur_output_array = (np.asarray([X_plot[:,:,0], Y_plot[:,:,0], B_vx_new[:,:,0], B_vy_new[:,:,0]]))
+    sur_output_array.dump(surface_output_file)
 
 
 if __name__ == '__main__':

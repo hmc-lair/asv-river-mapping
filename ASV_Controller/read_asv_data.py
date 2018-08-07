@@ -79,7 +79,7 @@ def read_ensemble(data):
     relative_velocities = []
 
     for i in range(num_cells):
-        start_offset = velocity_profile_offset + 2 + 2*i
+        start_offset = velocity_profile_offset + 2 + 8*i
         # Average over beams
         vel = []
         for j in range(num_beams):
