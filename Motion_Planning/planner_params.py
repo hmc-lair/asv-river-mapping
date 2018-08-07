@@ -47,4 +47,4 @@ INFO_MAP_SIZE = 10 #TODO: Fix this
 
 #Maps
 # maps.generateDepthGradientMaps
-E, m , n = maps.setupInfoMap('maps/river_map_gradient.csv')
+E, m , n = maps.setupInfoMap('maps/river_map_depth.csv')

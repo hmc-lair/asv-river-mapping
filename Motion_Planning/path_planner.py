@@ -228,12 +228,12 @@ def performDive(p_end, i, d, infoMap, HICs, prevExpansions):
 	newState[0] = d*np.cos(theta) + p_end[0] #X
 	newState[1] = d*np.sin(theta) + p_end[1] #Y
 
-	# TODO: If new point outside of map, don't add
+	# If new point outside of map, don't add
 	if newState[0] >= n or newState[0] < 0:
-		print("outside range", newState[0])
+		#print("outside range", newState[0])
 		return -1
 	if newState[1] >= m or newState[1] < 0:
-		print("outside range", newState[1])
+		#print("outside range", newState[1])
 		return -1
 
 	return newState

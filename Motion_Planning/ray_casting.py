@@ -22,7 +22,7 @@ m x n: Dimensions of information map
 '''
 def getVisitedCells(starts, ends, m, n):
 	# Deprecated vars: leftover params from multi-view planning
-	NUM_ANGLE_RANGES = 4
+	NUM_ANGLE_RANGES = 1
 	ENABLE_ANGLES = False
 
 	newVisitedCells = set()
