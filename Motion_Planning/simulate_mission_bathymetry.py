@@ -12,18 +12,17 @@ import utm
 
 from depth_kalman_filter import *
 
-traj_file = 'river_mission1.txt'
-mission_file = 'river_RRT_test.csv'
+traj_file = 'mission.txt'
 map_file = 'maps/river_map_depth.csv'
 
 ASV_SPEED = 1 #m/s
-TIMESTEP = 1 #s
+TIMESTEP = .5 #s
 
 def main():
 	# Load map data
 	f = open(map_file, 'r')
 	origin_nor, origin_eas, CELL_RES = list(map(float,f.readline()[:-1].split(',')))
-	print origin_nor, origin_eas, CELL_RES
+	print(origin_nor, origin_eas, CELL_RES)
 	f.close()
 
 	E = np.loadtxt(open(map_file, 'r'), delimiter=',', skiprows=1)
@@ -32,27 +31,48 @@ def main():
 	wps = np.loadtxt(open(traj_file, 'r'), delimiter=',')
 
 	depths = []
-
 	all_wps = []
 	for i in range(len(wps)-1):
 		start = wps[i]
 		end = wps[i+1]
 		pts = get_intermediate_points(start, end)
+		print('start, end', start, end)
 		for x,y in pts:
 			row = int(y)
 			col = int(x)
-			print row,col
+			print(row,col)
 			all_wps.append([y, x])
 			depths.append(E[row][col])
-
+	
 	ASV_nor = []
 	ASV_eas = []
-	with open(mission_file, 'w') as f:
-		for r,c in all_wps:
-			nor = r*CELL_RES + origin_nor
-			eas = c*CELL_RES + origin_eas
-			ASV_nor.append(nor)
-			ASV_eas.append(eas)
+	for r,c in all_wps:
+		nor = c*CELL_RES + origin_nor
+		eas = r*CELL_RES + origin_eas
+		ASV_nor.append(nor)
+		ASV_eas.append(eas)
+
+
+	# all_wps = []
+	# for i in range(len(wps)-1):
+	# 	start = wps[i]
+	# 	end = wps[i+1]
+	# 	pts = get_intermediate_points(start, end)
+	# 	for x,y in pts:
+	# 		row = int(y)
+	# 		col = int(x)
+	# 		all_wps.append([y, x])
+	# 		depths.append(E[row][col])
+
+	# ASV_nor = []
+	# ASV_eas = []
+	# for r,c in all_wps:
+	# 	nor = r*CELL_RES + origin_nor
+	# 	eas = c*CELL_RES + origin_eas
+	# 	ASV_nor.append(nor)
+	# 	ASV_eas.append(eas)
+	# 	depths.append(E[int(r)][int(c)])
+		
 
 	ASV_nor = np.asarray(ASV_nor)
 	ASV_eas = np.asarray(ASV_eas)
@@ -64,9 +84,9 @@ def main():
 	###########################################################################
 	# PLOTS
 	B, m, n, min_x, min_y = kalman_filter(ASV_nor, ASV_eas, Z, CELL_RES)
-	print B.shape
+	print(B.shape)
 	X_plot, Y_plot = np.meshgrid(np.arange(min_y, min_y + n*CELL_RES, CELL_RES), np.arange(min_x, min_x + m*CELL_RES, CELL_RES))
-	print X_plot.shape, Y_plot.shape
+	print(X_plot.shape, Y_plot.shape)
 
 	ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
 	ax1.plot_surface(X_plot, Y_plot, B, cmap=cm.viridis) #depths

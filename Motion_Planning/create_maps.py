@@ -16,10 +16,7 @@ from depth_kalman_filter import *
 
 sigma = 1 #Gaussian blur for info map
 tau = 0.4 #Thresholding
-
-BEAM_ANGLE = 20 #degrees
-TRANSDUCER_OFFSET = 0.1 #m
-SCALING_FACTOR = 30
+SCALING_FACTOR = 10
 
 #ASV log files
 millikan1 = '../ASV_Controller/Log/millikan_7-19/ALL_18-07-11 23.59.36.bin' #1) GOOD MAP OF MILLIKAN
@@ -47,6 +44,14 @@ def generateDepthGradientMaps():
 	Gx, Gy = np.gradient(B) # gradients with respect to x and y
 	G = (Gx**2+Gy**2)**.5  # gradient magnitude
 
+	for i in range(len(G)):
+		for j in range(len(G[0])):
+			if G[i][j] > .4:
+				G[i][j] = 0
+			G[i][j] *= 4
+
+	N = G/G.max()  # normalize 0..1
+
 	with open('map_depth.csv', 'w') as f:
 		f.write(str(min_x) + ',' + str(min_y) + ',' + str(CELL_RES) + '\n')
 		for i in range(len(B)):
@@ -56,26 +61,29 @@ def generateDepthGradientMaps():
 					f.write(',')
 			f.write('\n')
 	
-	with open('map_gradient.csv', 'w') as f:
+	with open('map_gradient_norm.csv', 'w') as f:
 		f.write(str(min_x) + ',' + str(min_y) + ',' + str(CELL_RES) + '\n')
-		for i in range(len(G)):
-			for j in range(len(G[0])):
-				if G[i][j] > .4:
-					G[i][j] = 0
-				G[i][j] *= SCALING_FACTOR
+		for i in range(len(N)):
+			for j in range(len(N[0])):
+				N[i][j] *= SCALING_FACTOR
 
-				f.write(str(round(G[i][j], 3)))
-				if j < len(G[0])-1:
+				f.write(str(round(N[i][j], 3)))
+				if j < len(N[0])-1:
 					f.write(',')
 			f.write('\n')
 
-	return G, len(G), len(G[0])
+	return N, len(G), len(G[0])
 
 def setupInfoMap(filename):
+	# Load origin UTM
+	f = open(filename, 'r')
+	origin_x, origin_y, CELL_RES = list(map(float,f.readline()[:-1].split(',')))
+	f.close()
+
 	# Load file
 	E = np.loadtxt(open(filename, 'r'), delimiter=',', skiprows=1)
 	m,n = E.shape
-	return E, m, n
+	return E, m, n, origin_x, origin_y, CELL_RES
 
 def createInfoMap(E, m, n):
 	#Calculate gradient of E using Sobel operator
@@ -108,4 +116,4 @@ def scoreInfoMap(infoMap):
 	return map_score, max_val
 
 if __name__ == '__main__':
-	generateGradientMap()
+	generateDepthGradientMaps()
