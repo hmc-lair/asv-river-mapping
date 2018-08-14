@@ -21,10 +21,6 @@ class TreeNode(object):
 		self.state = state #[x,y]
 		self.score = score #info gain of edges (independent of parent!), [s1,...sn]
 		self.visitedCells = set() #includes all visited cells of parent traced up to root!
-<<<<<<< HEAD
-=======
-		self.children = []
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 		self.parent = parent #A node
 		self.time = time
 
@@ -37,11 +33,7 @@ maxTime - time limit for AUV paths
 Output:
 Information gain of best path
 '''
-<<<<<<< HEAD
 def rrt(graph_bool, infoMap, numCycles, maxTime, startState):
-=======
-def rrt(graph_bool, numCycles, maxTime, mission_file):
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 	startTime = time.time()
 	mapScore,_ = maps.scoreInfoMap(infoMap)
 
@@ -58,13 +50,7 @@ def rrt(graph_bool, numCycles, maxTime, mission_file):
 	bestPath = []
 	bestScore = 0
 	bestDist = -1
-<<<<<<< HEAD
 	bestCells = {}
-=======
-	bestInfoMap = None
-
-	startState = [0,0]
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 
 	for i in range(numBatches):
 		HICs = []
@@ -80,10 +66,6 @@ def rrt(graph_bool, numCycles, maxTime, mission_file):
 		for j in range(numCycles):
 			c = selectNodeToExpand(nodeTable, HICs)
 			cNew = expandNewNode(c, nodeTable, infoMap, HICs, maxTime)
-<<<<<<< HEAD
-=======
-			#c.children.append(cNew)
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 
 			if ENABLE_PRUNING:
 				prune(cNew,infoMap)
@@ -96,10 +78,7 @@ def rrt(graph_bool, numCycles, maxTime, mission_file):
 		bestBatchPath = [] #3D array of path positions for each robot
 		bestBatchScore = 0
 		bestBatchDist = -1
-<<<<<<< HEAD
 		bestBatchCells = {}
-=======
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 
 		print('Num paths:', len(paths))
 
@@ -108,21 +87,12 @@ def rrt(graph_bool, numCycles, maxTime, mission_file):
 			points = []
 			for p in pathList:
 				points.append(p.state)
-<<<<<<< HEAD
 
 			#Length of path (only works for 1 robot)
 			dist = 0
 			for i in range(1,len(points)):
 				dist += getDist(points[i-1], points[i])
 
-=======
-
-			#Length of path (only works for 1 robot)
-			dist = 0
-			for i in range(1,len(points)):
-				dist += getDist(points[i-1], points[i])
-
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 			#Score of path
 			score = computeScore(pathList[-1].visitedCells, infoMap)
 
@@ -130,10 +100,7 @@ def rrt(graph_bool, numCycles, maxTime, mission_file):
 				bestBatchPath = points
 				bestBatchScore = score
 				bestBatchDist = dist
-<<<<<<< HEAD
 				bestBatchCells = pathList[-1].visitedCells
-=======
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 		
 		if bestBatchScore/bestBatchDist > bestScore/bestDist:
 			bestScore = bestBatchScore
@@ -145,47 +112,19 @@ def rrt(graph_bool, numCycles, maxTime, mission_file):
 
 	##################################################
 	# Post processing
-<<<<<<< HEAD
 	score = bestScore
 	pathTime = bestDist/ASV_SPEED
 	print("Best % coverage:", float(bestScore)/mapScore)
 	print("Path time", pathTime)
 	print('Best path: ', bestPath)
-=======
-	coverage = float(bestScore)/map_score
-	print("Best % coverage:", coverage)
-	print("Path time", bestDist/ASV_SPEED)
-	print('Best path: ', bestPath)
-	
-	# Save path
-	with open('mission.txt', 'w') as f:
-		for p in bestPath:
-			f.write(str(round(p[0],3)) + ',' + str(round(p[1],3)) + '\n')
-
-	# Save lat/lons
-	latlons = []
-	with open(mission_file, 'w') as f:
-		for r,c in bestPath:
-			x = r*CELL_RES + origin_x
-			y = c*CELL_RES + origin_y
-			lat,lon = utm.to_latlon(x, y, 11, 'S')
-			latlons.append([lat, lon])
-			f.write(str(lat) + ',' + str(lon) + '\n')
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 
 	if graph_bool:
 		X = [p[0] for p in bestPath]
 		Y = [p[1] for p in bestPath]
 		plt.plot(X,Y, '-o', color='r')
-<<<<<<< HEAD
 		#plt.show()
 
 	return bestPath[-1], pathTime, bestPath, bestCells, score #return last node, timestamp of that node, and score of path
-=======
-		plt.show()
-
-	return endTime - startTime, coverage
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 
 ############################### HELPER FUNCTIONS ###############################
 
@@ -243,10 +182,6 @@ def performDive(p_end, d, infoMap, HICs):
 		return -1
 	return newState
 
-<<<<<<< HEAD
-=======
-### Other helper functions ###
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 '''
 Selecting and adding nodes to hashtable
 '''
@@ -260,14 +195,6 @@ def addNodeToBins(bins, node, nodeTime, maxTime):
 	x = node.state[0]
 	y = node.state[1]
 	binIndex = int((float(y)/m)*NUM_BINS)
-<<<<<<< HEAD
-=======
-	#print(y, height, binIndex)
-	if binIndex > NUM_BINS:
-		binIndex = NUM_BINS
-
-	bins[binIndex].append(node)
->>>>>>> 947b55c8f4e7dc4bce043de3958bfdc4381dcf6d
 
 	if binIndex > NUM_BINS:
 		binIndex = NUM_BINS
