@@ -18,7 +18,7 @@ class ASV_robot:
 
         # angle offset
         self.adcp_angle_offset = 45 # degrees
-        self.speed_des = 5
+        self.speed_des = 1
 
         # Way points to navigate
         self.cur_des_point = ASV_state()
@@ -29,14 +29,14 @@ class ASV_robot:
         self.des_reached = True
         self.dist_threshold = 3
         self.dt = 0.01
-        self.motor_stop = False
+        self.motor_stop = True
         self.first_GPS = True
 
         # Controller Params
         self.Kp_ang = 1000
         self.Kp_nom = 500
-        self.Kd = 100
-        self.Ki = 0
+        self.Kd = 0
+        self.Ki = 10
         self.last_uL = 0.0
         self.last_uR = 0.0
         self.last_ang_error = 0.0
@@ -52,6 +52,9 @@ class ASV_robot:
         self.L_motor = 0.0
         self.back_spin_threshold = 250
         self.forward_threshold = 250
+
+        self.port = 0
+        self.strboard = 0
 
         # GPS Data and Coordinate
         self.GPS_fix_quality = 0
@@ -70,7 +73,7 @@ class ASV_robot:
         self.pitch = 0.0
         self.heading = 0.0
         self.mag_received = True
-        self.heading_offset = -20.0 #magnetic vs. true north
+        self.heading_offset = -12.0 #magnetic vs. true north
 
         # ADCP Data
         self.ADCP_roll = 0.0
@@ -108,7 +111,7 @@ class ASV_robot:
             self.all_data_f = open(self.all_data_filename, 'wb')
 
         self.mission_debug = True
-        self.control_debug = True
+        self.control_debug = False
         # data to log: GPS, ADCP, heading
 
     def main_loop(self):
@@ -123,33 +126,43 @@ class ASV_robot:
 
         if self.mag_received:
             self.localize_with_mag()
-            # print("Heading: ", self.angleDiff_deg(self.heading))
-            # print("Theta:", self.state_est.theta)
 
         # 3. Motion plan
-        # time.sleep(0.5)
         # Set destination 
         self.update_waypoint()
         
         # Compute control signal
         # port, strboard = self.diff_point_track(self.cur_des_point) # differential drive controller
-        port, strboard, rudder = self.point_track(self.cur_des_point) # servo drive controller
-        # rudder = 1700
-        
+        # port, strboard, rudder = self.point_track(self.cur_des_point) # servo drive controller
+        self.port, self.strboard, self.rudder = self.integral_LOS_pt(self.cur_des_point)
+
+
+        # System Identificaiton Test
+        # self.port = -800
+        # self.strboard = -800
+        # self.rudder = 1800
+
         # 4. Update control signals
         if self.motor_stop == False:
-            self.update_control(port, strboard, rudder)
+            self.update_control(self.port, self.strboard, self.rudder)
+        else:
+            self.rudder = 1600
+            self.environment.send_servo_command(self.rudder)
 
-        if self.log_data:
+
+
+        # if self.log_data:
             # Log control message
-            current_state = [self.state_est.x, self.state_est.y, self.state_est.theta, self.state_est.v_course, self.state_est.ang_course, rudder, port, strboard]
-            current_state_str = "$CTRL," + ",".join(map(str,current_state)) + "###"
+            # current_state = [self.state_est.x, self.state_est.y, self.state_est.theta, self.state_est.v_course, self.state_est.ang_course, rudder, port, strboard]
+            # current_state_str = "$CTRL," + ",".join(map(str,current_state)) + "###"
+            # print(current_state_str)
+            # self.all_data_f.write(current_state_str.encode())
 
         if self.control_debug:
-            print("Left %f, Right %f" % (-port, -strboard))
-            print("Rudder: %d" % (rudder))
-            print("Boat speed: ", self.state_est.v_course)
-            print("Course angle: ", self.state_est.ang_course)
+            # print("Left %f, Right %f" % (-self.port, -self.strboard))
+            # print("Rudder: %d" % (self.rudder))
+            # print("Boat speed: ", self.state_est.v_course)
+            # print("Course angle: ", self.state_est.ang_course)
             print("Des Speed: %f, Kp_a: %f, Kp_nom: %f, U_lim: %f, L_lim: %f" % (self.speed_des, self.Kp_ang, self.Kp_nom, self.forward_threshold, self.back_spin_threshold))
 
 
@@ -270,26 +283,43 @@ class ASV_robot:
         on_track_error = distance * math.cos(self.angleDiff(angle_off - track_angle))
         off_track_error = distance * math.sin(self.angleDiff(angle_off - track_angle))
 
-        int_gain = 50
+        int_gain = self.Ki
         off_int = int_gain * off_track_error * self.dt / 2 + int_gain * self.last_offtrack_error * self.dt/2
 
         self.last_offtrack_error = off_track_error
         
-        ang_int = math.atan2(off_int, on_track_error)
+        if abs(off_int) == 0.0:
+            off_int = 0
+        if on_track_error == 0.0:
+            on_track_error = 0.0001
+
+        ang_int = math.atan(off_int/on_track_error)
         des_angle = self.angleDiff(angle_off + ang_int)
 
-        direction_off = self.angleDiff(track_angle - self.state_est.ang_course)
-        speed_to_dest = self.state_est.v_course * math.cos(direction_off)
+        # direction_off = self.angleDiff(angle_off - self.state_est.ang_course)
+        robot_vx = self.state_est.v_course * math.cos(self.state_est.ang_course)
+        robot_vy = self.state_est.v_course * math.sin(self.state_est.ang_course)
+        robot_v = np.array([robot_vx, robot_vy])
+
+        desired_dir = np.array([math.cos(angle_off), math.sin(angle_off)])
+
+        # direction_off = math.acos(np.dot(robot_v, desired_dir) / (self.state_est.v_course * 1))
+        # speed_to_dest = self.state_est.v_course * math.cos(direction_off)
+        speed_to_dest = np.dot(desired_dir, robot_v) #* desired_dir
+        # speed_to_dest = math.sqrt(np.dot(speed_to_dest, speed_to_dest))
+        
         # print("Last", self.last_des_point)
         # print("Current", self.state_est)
+        print("#################")
+        print("Speed in Dir ", speed_to_dest)
         # print("Offtrack ", off_track_error)
-        # print("Angle off ", angle_off)
-        # print("Track angle", track_angle)
-        # print("Distance ", distance)
+        # print("ANG OFF ", angle_off)
+        # # print("Track angle", track_angle)
+        # # print("Distance ", distance)
         # print("integral off ", off_int)
-        # print("ang int", ang_int)
-        # print("angle des", des_angle)
-        print("Speed to dest ", speed_to_dest)
+        # print("on error ", on_track_error)
+        # print("ANG INT", ang_int)
+        # print("ANG DES", des_angle)
 
         if distance <= self.dist_threshold or self.des_reached:
             self.stop_motor = True
@@ -298,13 +328,14 @@ class ASV_robot:
             # self.last_offtrack_error = 0
             u_starboard = 0.0
             u_port = 0.0
-            u_rudder = 1515
+            u_rudder = 1600
         else:
             # Simple heading PD control
             angle_error = -self.angleDiff(des_angle - self.state_est.theta)
+            print("ANG ERROR ", angle_error)
             # u_rudder = self.last_u_rudder + (angle_error * (self.Kp_ang + self.Ki * self.dt) - self.last_ang_error * self.Kp_ang)
-            u_rudder = self.last_u_rudder + (angle_error * (self.Kp_ang + self.Kd / self.dt) + self.last_ang_error * (-self.Kp_ang - 2*self.Kd/self.dt) + self.last_ang_error2 * self.Kd/self.dt)
-            # u_rudder = angle_error * self.Kp_ang
+            # u_rudder = self.last_u_rudder + (angle_error * (self.Kp_ang + self.Kd / self.dt) + self.last_ang_error * (-self.Kp_ang - 2*self.Kd/self.dt) + self.last_ang_error2 * self.Kd/self.dt)
+            u_rudder = angle_error * self.Kp_ang
 
             self.last_ang_error = angle_error
             self.last_ang_error2 = self.last_ang_error
@@ -320,7 +351,7 @@ class ASV_robot:
             elif (u_rudder < 1195):
                 u_rudder = 1195
 
-            print(u_rudder)
+            print("Rudder ", u_rudder)
 
             u_starboard = -min(max(u_nom, -self.back_spin_threshold), self.forward_threshold)
             u_port = -min(max(u_nom, -self.back_spin_threshold), self.forward_threshold)
@@ -575,6 +606,8 @@ class ASV_robot:
             self.des_reached = False
         elif parsed_data[0] == "!STARTMISSION":
             self.cur_des_point = self.way_points[0]
+            self.last_des_point.x = self.state_est.x
+            self.last_des_point.y = self.state_est.y
             self.des_reached = False
         elif parsed_data[0] == "!ABORTMISSION":
             self.way_points = []
@@ -644,8 +677,6 @@ class ASV_robot:
                 data_str = self.environment.arduino_ser.readline()
                 # print(data_str)
                 mag_data =data_str.split(b',')
-                # self.all_data_f.write(data_str)
-                # print(mag_data[0])
                 try:
                     if mag_data[0] == b'$MAG':
                         self.heading = float(mag_data[1]) + 90 + self.heading_offset
@@ -672,8 +703,11 @@ class ASV_robot:
 
                     # Data Logging
                     if self.log_data == True:
+                        current_state = [self.state_est.x, self.state_est.y, self.state_est.theta, self.state_est.v_course, self.state_est.ang_course, self.rudder, self.port, self.strboard]
+                        current_state_str = "$CTRL," + ",".join(map(str,current_state)) + "###"
+                        self.all_data_f.write(current_state_str.encode())
+
                         self.all_data_f.write("$GPS,".encode() + data_str + b'###')
-                        # self.gps_f.write(data_str.decode())
                     self.process_GPS(data_str)
 
         # self.gps_f.close()
@@ -686,7 +720,6 @@ class ASV_robot:
         raw_msg = data_decoded.split(',')
         if raw_msg[0] == '$GPGGA':
             self.GPS_fix_quality = raw_msg[6]
-            #print(raw_msg)
             if self.GPS_fix_quality == '0' or self.GPS_fix_quality == '\x00' or self.GPS_fix_quality == '\x000':
                 self.GPS_received = False
                 # print('Bad GPS, no fix :(')
@@ -699,12 +732,15 @@ class ASV_robot:
                 self.GPS_Time = raw_msg[1]
                 self.state_est.lat = self.str_to_coord(raw_msg[2])
                 self.state_est.lon = -self.str_to_coord(raw_msg[4])
-                # print("lat lon:", self.state_est.lat, self.state_est.lon)
                 self.utm_x, self.utm_y, _, _ = utm.from_latlon(self.state_est.lat, self.state_est.lon)       
                 self.state_est.x = self.utm_x
                 self.state_est.y = self.utm_y
                 self.GPS_received = True
-                # print('GPS: ', self.state_est.x, self.state_est.y)
+                
+                if self.first_GPS:
+                    self.cur_des_point.x = self.utm_x
+                    self.cur_des_point.y = self.utm_y
+                    self.first_GPS = False
         elif raw_msg[0] == '$GPVTG':
             # print(raw_msg)
             if len(raw_msg) < 10:

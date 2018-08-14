@@ -1,31 +1,44 @@
 import matplotlib.pyplot as plt
+import scipy.io as sio
 import struct
 def main():
-	f = open('afternoon_test-7-19.bin', 'rb')
-	all_data = b''
-	
-	for line in f.readlines():
-		all_data += line
+    f = open('ALL_18-07-12 09.37.04.bin', 'rb')
+    all_data = b''
+    
+    for line in f.readlines():
+        all_data += line
 
-	split_data = all_data.split(b'###')
-	GPS_data = list(filter(lambda x: x.split(b',')[0] == b'$GPS', split_data[:-1]))
-	ADCP_data = list(filter(lambda x: x.split(b',')[0] == b'$ADCP', split_data[:-1]))
-	state_data = list(filter(lambda x: x.split(b',')[0] == b'$STATE', split_data[:-1]))
-	
-	state_data_split = [state.split(b',') for state in state_data]
-	ASV_x = [float(state[1]) for state in state_data_split]
-	ASV_y = [float(state[2]) for state in state_data_split] 
-	# print(state_data[0][0])
-	plt.plot(ASV_x, ASV_y, color='black', zorder=2)
-	plt.xlabel('Meters')
-	plt.ylabel('Meters')
+    split_data = all_data.split(b'###')
+    # GPS_data = list(filter(lambda x: x.split(b',')[0] == b'$GPS', split_data[:-1]))
+    # ADCP_data = list(filter(lambda x: x.split(b',')[0] == b'$ADCP', split_data[:-1]))
+    # state_data = list(filter(lambda x: x.split(b',')[0] == b'$STATE', split_data[:-1]))
+    control_data = list(filter(lambda x: x.split(b',')[0] == b'$CTRL', split_data[:-1]))
+    
+    control_data_split = [c.split(b',') for c in control_data]
+    # state_data_split = [state.split(b',') for state in state_data]
+    # ASV_x = [float(state[1]) for state in state_data_split]
+    # ASV_y = [float(state[2]) for state in state_data_split] 
 
-	plt.show()
-	# print(state_data)
-	# print(ADCP_data[0][6:8])
-	# print(read_ensemble(ADCP_data[0][6:]))
+    x_asv = [float(state[1]) for state in control_data_split]
+    y_asv = [float(state[2]) for state in control_data_split]
+    ang_asv = [float(state[3]) for state in control_data_split]
+    v_asv = [float(state[4]) for state in control_data_split]
+    course_asv = [float(state[5]) for state in control_data_split]
+    rudder = [float(state[6]) for state in control_data_split]
+    port = [float(state[7]) for state in control_data_split]
+    strboard = [float(state[8]) for state in control_data_split]
+    
+    RUD = rudder[100]
+    PORT = port[100] * -1
 
-	# print(ADCP_data[0][:6])
+    # plt.plot(course_a)
+    
+    # print(RUD)
+    # print(PORT)
+
+    # sio.savemat("R" + str(RUD) + "T" + str(PORT)+ '.mat', {'vect':vect})
+
+    plt.show()
 
 def read_ensemble(data):
     all_data = data
@@ -88,9 +101,6 @@ def read_ensemble(data):
             vel.append(curVel)
         #vel = vel/float(num_beams)
         relative_velocities.append(vel)
-    # print(relative_velocities)
-    # print('Num cells: ', num_cells)
-    # print('Velocity profile: ', relative_velocities)
 
     # BOTTOM TRACK (abbr. bt) (see page 154)
 
@@ -159,4 +169,4 @@ def read_ensemble(data):
 
 
 if __name__ == '__main__':
-	main()
+    main()

@@ -15,7 +15,7 @@ class ASV_state:
 		self.v_course = 0 
 		self.ang_course = 0
 
-		self.current_v = 2
+		self.current_v = 0
 		self.current_ang = math.pi/2
 
 		self.roll = 0.0

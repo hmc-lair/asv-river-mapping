@@ -12,8 +12,8 @@ import utm
 class ASV_Controller:
     
     def __init__(self):
-        self.mode = "SIM MODE"
-        # self.mode = "HARDWARE MODE"
+        # self.mode = "SIM MODE"
+        self.mode = "HARDWARE MODE"
         self.ASV_sim = None
 
         # ADCP measuremens
@@ -50,8 +50,8 @@ class ASV_Controller:
             self.robot = ASV_robot.ASV_sim(self.sim_env)
             
             # Specify robot location (50,50) in pixel coordinates
-            self.robot.actual_state.x = 327180.0 #396168.0 327162.0 3924012.0
-            self.robot.actual_state.y = 3923900.0 #3777912.0
+            self.robot.actual_state.x = 326382 #+ 20#396168.0 327162.0 3924012.0
+            self.robot.actual_state.y = 3924762.0 #- 100 #3777912.0
             self.robot.actual_state.theta = 0
             self.robot.estimate_state()
 
