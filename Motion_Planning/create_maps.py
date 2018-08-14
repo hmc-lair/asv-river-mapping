@@ -4,9 +4,11 @@ Creates occupancy grid and info map for RRT planner
 '''
 import numpy as np
 import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
 from scipy import signal
 from scipy import ndimage
 import scipy.io as sio
+import copy
 import os
 import utm
 import gdal
@@ -16,10 +18,7 @@ from depth_kalman_filter import *
 
 sigma = 1 #Gaussian blur for info map
 tau = 0.4 #Thresholding
-
-BEAM_ANGLE = 20 #degrees
-TRANSDUCER_OFFSET = 0.1 #m
-SCALING_FACTOR = 30
+SCALING_FACTOR = 10
 
 #ASV log files
 millikan1 = '../ASV_Controller/Log/millikan_7-19/ALL_18-07-11 23.59.36.bin' #1) GOOD MAP OF MILLIKAN
@@ -47,6 +46,14 @@ def generateDepthGradientMaps():
 	Gx, Gy = np.gradient(B) # gradients with respect to x and y
 	G = (Gx**2+Gy**2)**.5  # gradient magnitude
 
+	for i in range(len(G)):
+		for j in range(len(G[0])):
+			if G[i][j] > .4:
+				G[i][j] = 0
+			G[i][j] *= 4
+
+	N = G/G.max()  # normalize 0..1
+
 	with open('map_depth.csv', 'w') as f:
 		f.write(str(min_x) + ',' + str(min_y) + ',' + str(CELL_RES) + '\n')
 		for i in range(len(B)):
@@ -56,26 +63,34 @@ def generateDepthGradientMaps():
 					f.write(',')
 			f.write('\n')
 	
-	with open('map_gradient.csv', 'w') as f:
+	with open('map_gradient_norm.csv', 'w') as f:
 		f.write(str(min_x) + ',' + str(min_y) + ',' + str(CELL_RES) + '\n')
-		for i in range(len(G)):
-			for j in range(len(G[0])):
-				if G[i][j] > .4:
-					G[i][j] = 0
-				G[i][j] *= SCALING_FACTOR
+		for i in range(len(N)):
+			for j in range(len(N[0])):
+				N[i][j] *= SCALING_FACTOR
 
-				f.write(str(round(G[i][j], 3)))
-				if j < len(G[0])-1:
+				f.write(str(round(N[i][j], 3)))
+				if j < len(N[0])-1:
 					f.write(',')
 			f.write('\n')
 
-	return G, len(G), len(G[0])
+	return N, len(G), len(G[0])
 
 def setupInfoMap(filename):
+	# Load origin UTM
+	f = open(filename, 'r')
+	origin_x, origin_y, CELL_RES = list(map(float,f.readline()[:-1].split(',')))
+	f.close()
+
 	# Load file
 	E = np.loadtxt(open(filename, 'r'), delimiter=',', skiprows=1)
+
+
+	E = np.concatenate((E, E), axis=1)
+	print('Dim of map', E.shape)
+
 	m,n = E.shape
-	return E, m, n
+	return E, m, n, origin_x, origin_y, CELL_RES
 
 def createInfoMap(E, m, n):
 	#Calculate gradient of E using Sobel operator
@@ -93,7 +108,6 @@ def createInfoMap(E, m, n):
 
 ''' function that takes in 2d info map and scores it for calculating coverage metric at end of planner'''
 def scoreInfoMap(infoMap):
-
 	map_score = 0
 	xlen = len(infoMap[0])
 	ylen = len(infoMap)
@@ -107,5 +121,33 @@ def scoreInfoMap(infoMap):
 				
 	return map_score, max_val
 
+'''
+function to update the infoMap based on the visitedCells of a generated bestPath
+'''
+def adjustMap(visitedCells, originalMap):
+	infoMap = copy.deepcopy(originalMap)
+	m,n = originalMap.shape
+
+	#Remove already visited cells from map
+	while len(visitedCells) != 0:
+		currentCell = visitedCells.pop() #remove a random cell from the set
+		if (0 <= currentCell[0] < n) and (0 <= currentCell[1] < m):
+			infoMap[currentCell[1]][currentCell[0]] = 0 #set cell info value to be zero
+
+	return infoMap #return modified map
+
+def filterMap(originalMap, mu, sigma):
+	infoMap = copy.deepcopy(originalMap)
+	#Apply gaussian "filter" to prioritize cells closer to existing path
+	for r in range(len(infoMap)):
+		for c in range(len(infoMap[0])):
+			infoMap[r][c] *= gaussian(c, mu, sigma)
+
+	return infoMap
+
+
+def gaussian(x, mu, sig):
+	return np.exp(-np.power(x - mu, 2.) / (2 * np.power(sig, 2.)))
+
 if __name__ == '__main__':
-	generateGradientMap()
+	generateDepthGradientMaps()

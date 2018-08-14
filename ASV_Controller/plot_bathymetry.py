@@ -25,7 +25,10 @@ lake1 = 'Log/lake_7-27/ALL_18-07-12 06.49.05.bin'
 river1 = 'Log/river_7-27/ALL_18-07-12 06.47.41.bin'
 river2 = 'Log/river_7-27/ALL_18-07-12 06.38.10.bin'
 
-data_file = river1
+########################################
+river1 = 'Log/river_8-13/ALL_18-07-12 11.35.45.bin'
+
+data_file = river
 
 #Mission files
 #TODO: add mission file
@@ -188,7 +191,7 @@ def main():
 
     X_plot, Y_plot = np.meshgrid(np.arange(min_y, min_y + n*CELL_RES, CELL_RES), np.arange(min_x, min_x + m*CELL_RES, CELL_RES))
     
-    # 2) Depth surface map
+    # # 2) Depth surface map
     ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
     ax1.plot_surface(X_plot, Y_plot, B, cmap=cm.viridis) #depths
     ax1.plot(ASV_eas, ASV_nor, np.zeros(len(X)), color='red') #ASV path
@@ -209,7 +212,7 @@ def main():
     # ax2.set_ylabel('Northing (m)')
 
     # 4) Gradient plot
-    # Gx, Gy = np.gradient(B_new) # gradients with respect to x and y
+    # Gx, Gy = np.gradient(B) # gradients with respect to x and y
     # G = (Gx**2+Gy**2)**.5  # gradient magnitude
     
     # for i in range(len(G)):
@@ -219,14 +222,15 @@ def main():
     #         G[i][j] *= 4
 
     # N = G/G.max()  # normalize 0..1
-    # print(G.min(), G.max())
-    # print(N)
 
-    # ax = plt.figure(figsize=(8,6)).gca(projection='3d')
-    # ax.plot_surface(X_plot, Y_plot, B_new, facecolors=cm.viridis(N))
-    # ax.plot(ASV_nor, ASV_eas, np.zeros(len(X)), color='red') #ASV path
-    # plt.matshow(G,cmap='viridis')
-    # plt.colorbar()
+    # ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
+    # ax1.plot_surface(X_plot, Y_plot, B, facecolors=cm.viridis(N))
+    # ax1.plot(ASV_eas, ASV_nor, np.zeros(len(X)), color='red') #ASV path
+    # ax1.view_init(200, -50)
+    # ax1.set_zlabel('Depth (m)')
+    # ax1.invert_zaxis()
+    # ax1.set_xlabel('Easting (m)')
+    # ax1.set_ylabel('Northing (m)')
 
     plt.show()
 

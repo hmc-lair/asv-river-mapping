@@ -11,9 +11,9 @@ import math
 # IMAGE_HEIGHT = 250.
 # MAP_FILE = '../Maps/cast.tif'
 
-IMAGE_WIDTH = 200
-IMAGE_HEIGHT = 150
-MAP_FILE = '../Maps/millikan.tif'
+# IMAGE_WIDTH = 200
+# IMAGE_HEIGHT = 150
+# MAP_FILE = '../Maps/millikan.tif'
 
 # IMAGE_WIDTH = 600
 # IMAGE_HEIGHT = 400
@@ -21,7 +21,11 @@ MAP_FILE = '../Maps/millikan.tif'
 
 # IMAGE_WIDTH = 1000
 # IMAGE_HEIGHT = 700
-# MAP_FILE = '../Maps/lake.tif'
+# MAP_FILE = '../Maps/lake_7-27.tif'
+
+IMAGE_WIDTH = 300
+IMAGE_HEIGHT = 200
+MAP_FILE = '../Maps/river_8-13.tif'
 
 MAP_WIDTH = 800
 MAP_HEIGHT = 600
@@ -143,7 +147,7 @@ class ASV_graphics:
         # self.set_desired_speed.pack()
         self.desired_speed_label = Label(self.speed_frame, anchor='w', text='Desired Speed (m/s)').pack(side='left')
         self.desired_speed = Entry(self.speed_frame, width=10)
-        self.desired_speed.insert(END, '0.5')
+        self.desired_speed.insert(END, '3')
         self.desired_speed.bind('<Return>', self.on_set_desired_speed)
         self.desired_speed.pack(side='right')
 
@@ -157,7 +161,7 @@ class ASV_graphics:
         self.Kp_ang_frame.pack(side='left')
         self.Kp_ang_label = Label(self.Kp_ang_frame, anchor='w', text='K_ang').pack(side='left')
         self.Kp_ang = Entry(self.Kp_ang_frame, width=5)
-        self.Kp_ang.insert(END, '700')
+        self.Kp_ang.insert(END, '800')
         self.Kp_ang.pack(side='right')
         self.Kp_nom_frame = Frame(self.Kp_frame)
         self.Kp_nom_frame.pack(side='right')
@@ -172,13 +176,13 @@ class ASV_graphics:
         self.fwd_limit_frame.pack(side='left')
         self.fwd_limit_label = Label(self.fwd_limit_frame, anchor='w', text='Fwd Limit').pack(side='left')
         self.fwd_limit = Entry(self.fwd_limit_frame, width=5)
-        self.fwd_limit.insert(END, '500')
+        self.fwd_limit.insert(END, '1000')
         self.fwd_limit.pack(side='right')
         self.bwd_limit_frame = Frame(self.throttle_frame)
         self.bwd_limit_frame.pack(side='right')
         self.bwd_limit_label = Label(self.bwd_limit_frame, anchor='w', text='Bwd Limit').pack(side='left')
         self.bwd_limit = Entry(self.bwd_limit_frame, width=5)
-        self.bwd_limit.insert(END, '500')
+        self.bwd_limit.insert(END, '1000')
         self.bwd_limit.pack(side='right')
 
         # Tracing border

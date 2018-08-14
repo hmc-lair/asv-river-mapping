@@ -3,11 +3,24 @@ depth_kalman_filter.py
 Kalman filter + log file reading helpers
 '''
 import numpy as np
+import matplotlib.image as mpimg
+from scipy import signal
+from scipy import ndimage
+import scipy.io as sio
+import os
+import utm
+import gdal
+import struct
 
 # Plot parameters
 win = 5
 sigma_slope = 0.1204
 sigma_offset = 0.6142
+CELL_RES = 0.5
+
+BEAM_ANGLE = 20 #degrees
+TRANSDUCER_OFFSET = 0.1 #m
+SCALING_FACTOR = 30
 
 def kalman_filter(ASV_nor, ASV_eas, Z, CELL_RES):
 	min_depth = Z.min()
@@ -55,7 +68,7 @@ def kalman_filter(ASV_nor, ASV_eas, Z, CELL_RES):
 
 # Returns pixel coordinates from GPS data
 def read_data_file(filename):
-	f = open(data_file, 'rb')
+	f = open(filename, 'rb')
 	all_data = b''
 	
 	for line in f.readlines():
