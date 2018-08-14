@@ -36,11 +36,9 @@ def main():
 		start = wps[i]
 		end = wps[i+1]
 		pts = get_intermediate_points(start, end)
-	
 		for x,y in pts:
 			row = int(y)
 			col = int(x)
-		
 			all_wps.append([y, x])
 			depths.append(E[row][col])
 	

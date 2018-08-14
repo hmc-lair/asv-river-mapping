@@ -32,7 +32,7 @@ MIN_DIVE_LENGTH = 5
 
 #Raycasting Parameters
 WIDTH = 5 * 10 #.1 scaling, so # of cells 
-SCANNING_SPREAD = 2 #TODO: make this a multiple of WIDTH
+SCANNING_SPREAD = 5 #TODO: make this a multiple of WIDTH
 RC_DELTA = .5
 ENABLE_SPREAD = True
 NUM_ANGLE_RANGES = 4
