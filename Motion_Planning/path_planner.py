@@ -3,24 +3,24 @@ path_planner.py
 
 Main function for ASV RRT planner
 '''
+import copy
 import time
+import utm
 import numpy as np
 import random as rand
 import matplotlib.pyplot as plt
 
 import ray_casting as rc
-import graph_results as graph
 from planner_params import *
 
 '''
 Tree implementation for multi-robot RRT
 '''
 class TreeNode(object):
-	def __init__(self, end, parent, scores, time):
-		self.end = end #[[x1,y1]...[xn,yn]]
-		self.scores = scores #info gain of edges (independent of parent!), [s1,...sn]
-		self.visitedCells = set()
-		self.children = []
+	def __init__(self, state, parent, score, time):
+		self.state = state #[x,y]
+		self.score = score #info gain of edges (independent of parent!), [s1,...sn]
+		self.visitedCells = set() #includes all visited cells of parent traced up to root!
 		self.parent = parent #A node
 		self.time = time
 
@@ -33,29 +33,24 @@ maxTime - time limit for AUV paths
 Output:
 Information gain of best path
 '''
-def rrtSerial(graph_bool, numCycles, maxTime, numRobots):
+def rrt(graph_bool, infoMap, numCycles, maxTime, startState):
 	startTime = time.time()
-
-	#Initialize information maps
-	infoMap = maps.createInfoMap(E, m, n)
+	mapScore,_ = maps.scoreInfoMap(infoMap)
 
 	if graph_bool:
 		plt.matshow(infoMap,cmap='viridis') #show map in path graphing figure
 		plt.colorbar() #infoMap scale for figure
 		print("Done creating maps", m, n)
 
-	map_score,_ = maps.scoreInfoMap(infoMap)
-
 	######################################################
+	goalSide = 'r' #determine which side of the river we need to go to
+	if startState[1] > m - ENDGAME_THRES:
+		goalSide = 'l'
+
 	bestPath = []
 	bestScore = 0
-	bestInfoMap = None
-
-	startState = [[10,0]] #list of locations to start the bots
-	# xcoord = int(INFO_MAP_SIZE*0.85)
-	# ycoord = INFO_MAP_SIZE
-	# for i in range(numRobots): #generate a set of unique start states
-	# 	startState.append([xcoord, int(((ycoord*.8)*(float(i)/numRobots))+(ycoord*.1))])
+	bestDist = -1
+	bestCells = {}
 
 	for i in range(numBatches):
 		HICs = []
@@ -69,13 +64,12 @@ def rrtSerial(graph_bool, numCycles, maxTime, numRobots):
 		nodeTable[0] =[tree]
 
 		for j in range(numCycles):
-			c = selectNodeToExpand(nodeTable, HICs, maxTime)
-			cNew = expandNewNode(c, nodeTable, infoMap, HICs, maxTime, numRobots)
-			#c.children.append(cNew)
+			c = selectNodeToExpand(nodeTable, HICs)
+			cNew = expandNewNode(c, nodeTable, infoMap, HICs, maxTime)
 
 			if ENABLE_PRUNING:
 				prune(cNew,infoMap)
-			if endGame(cNew, maxTime):
+			if endGame(cNew, goalSide):
 				paths.append(cNew)
 
 		##################################################
@@ -83,121 +77,90 @@ def rrtSerial(graph_bool, numCycles, maxTime, numRobots):
 		# Return best path
 		bestBatchPath = [] #3D array of path positions for each robot
 		bestBatchScore = 0
+		bestBatchDist = -1
+		bestBatchCells = {}
+
+		print('Num paths:', len(paths))
 
 		for path in paths:
-			pathList,_ = getPath(path, numRobots, maxTime)
+			pathList,_ = getPath(path, maxTime)
 			points = []
 			for p in pathList:
-				points.append(p.end)
+				points.append(p.state)
 
+			#Length of path (only works for 1 robot)
+			dist = 0
+			for i in range(1,len(points)):
+				dist += getDist(points[i-1], points[i])
+
+			#Score of path
 			score = computeScore(pathList[-1].visitedCells, infoMap)
 
-			if score >= bestBatchScore:
+			if score/dist >= bestBatchScore/bestBatchDist:
 				bestBatchPath = points
 				bestBatchScore = score
-	
-		if bestBatchScore > bestScore:
+				bestBatchDist = dist
+				bestBatchCells = pathList[-1].visitedCells
+		
+		if bestBatchScore/bestBatchDist > bestScore/bestDist:
 			bestScore = bestBatchScore
+			bestDist = bestBatchDist
 			bestPath = bestBatchPath
+			bestCells = bestBatchCells
 
 	endTime = time.time()
 
 	##################################################
-	
-	#Length of bestPath
-	dists = []
-	for j in range(numRobots):
-		robotDist = 0
-		for i in range(1,len(bestPath)):
-			curDist = getDist(bestPath[i-1][j], bestPath[i][j])
-			robotDist += curDist
-		dists.append(robotDist)
-
-	coverage = float(bestScore)/map_score
-
-	print("Best % coverage:", coverage)
-	#print "Runtime", endTime - startTime
-	print("Path time", dists[0]/AUV_SPEED)
+	# Post processing
+	score = bestScore
+	pathTime = bestDist/ASV_SPEED
+	print("Best % coverage:", float(bestScore)/mapScore)
+	print("Path time", pathTime)
+	print('Best path: ', bestPath)
 
 	if graph_bool:
-		graph.graphResults(numRobots, bestPath)
+		X = [p[0] for p in bestPath]
+		Y = [p[1] for p in bestPath]
+		plt.plot(X,Y, '-o', color='r')
+		#plt.show()
 
-	# store path
-	print('Best path: ', bestPath)
-	with open('mission.txt', 'w') as f:
-		for [p] in bestPath:
-			f.write(str(round(p[0],3)) + ',' + str(round(p[1],3)) + '\n')
-
-	return endTime - startTime, coverage
+	return bestPath[-1], pathTime, bestPath, bestCells, score #return last node, timestamp of that node, and score of path
 
 ############################### HELPER FUNCTIONS ###############################
 
 '''
 Expands parent node and returns the new, expanded node
 '''
-def expandNewNode(parent, bins, infoMap, HICs, maxTime, numRobots):
+def expandNewNode(parent, bins, infoMap, HICs, maxTime):
 	diveDist = dynamicDive()
+	newTime = parent.time + diveDist/ASV_SPEED
 
-	newStates = [[0,0] for i in range(numRobots)]
-	newTime = parent.time + diveDist/AUV_SPEED
-	allVisitedCells = set()
+	state = -1
+	while state == -1: #Make sure within boundaries
+		state = performDive(parent.state, diveDist, infoMap, HICs)
+	
+	newVisitedCells = rc.getVisitedCells([parent.state], [state], len(infoMap), len(infoMap[0]))
+	score = computeScore(newVisitedCells, infoMap)
 
-	# Expand each robot serially
-	order = np.arange(0,numRobots)
-	rand.shuffle(order)
-	prevExpansions = []
-	for i in order:
-		state = -1
-		while state == -1: #Make sure within boundaries
-			state = performDive(parent.end[i], i, diveDist, infoMap, HICs, prevExpansions)
-		newStates[i] = state
-
-		newVisitedCells = rc.getVisitedCells([parent.end[i]], [state], len(infoMap), len(infoMap[0]))
-		allVisitedCells = allVisitedCells.union(newVisitedCells)
-
-		score = computeScore(newVisitedCells, infoMap)
-
-		#Add to HICs if above threshold
-		if score > HIC_THRES:
-			if ENABLE_HICS:
-				# print("HIC", score)
-				HICs.append([parent.end[i], state])
+	#Add to HICs if above threshold
+	if score > HIC_THRES:
+		if ENABLE_HICS:
+			HICs.append([parent.state, state])
 
 
-	newNode = TreeNode(newStates, parent, 0, newTime)
-	#Add to bins
+	newNode = TreeNode(state, parent, 0, newTime)
 	addNodeToBins(bins, newNode, newTime, maxTime)
 
 	#Update visitedCells & score
-	newNode.score = computeScore(allVisitedCells, infoMap)
-	newNode.visitedCells = allVisitedCells.union(parent.visitedCells)
+	newNode.score = computeScore(newVisitedCells, infoMap)
+	newNode.visitedCells = newVisitedCells.union(parent.visitedCells)
 
 	return newNode
-
-def checkCollisions(start, prevExpansions):
-	badThetas = []
-	for x,y,theta_0 in prevExpansions:
-		thetaPrime = np.arctan2(start[1]-y,start[0]-x)
-		if thetaPrime < 0:
-			thetaPrime += 2*np.pi
-		deltaTheta = thetaPrime - theta_0
-		thetaPrime -= np.pi #Reverse direction
-		if thetaPrime < 0:
-			thetaPrime += 2*np.pi
-		theta = thetaPrime + deltaTheta
-		badThetas.append(theta)
-	return badThetas
-
-
-def testCollisionChecking():
-	start = (1,1)
-	prevExpansions = [(5,-2,np.pi)]
-	print(checkCollisions(start, prevExpansions)[0]*180./np.pi)
 
 '''
 Performs dive from endpoint of *ith* parent and returns new position
 '''
-def performDive(p_end, i, d, infoMap, HICs, prevExpansions):
+def performDive(p_end, d, infoMap, HICs):
 	randVal = rand.random()
 	if randVal >= gamma and len(HICs) > 0: #Towards random HIC
 		h = HICs[rand.randint(0,len(HICs)-1)][1]
@@ -205,24 +168,6 @@ def performDive(p_end, i, d, infoMap, HICs, prevExpansions):
 
 	else: #Towards random bearing
 		theta = rand.uniform(0,2*np.pi)
-
-	# Collision checking can be re-enabled for multi-robot planning
-	# # Check if collision 
-	# if COLLISION_PREV:
-	# 	willCollide = True
-	# 	badThetas = checkCollisions(p_end, prevExpansions)
-
-	# 	while willCollide:
-	# 		count = 0
-	# 		for t in badThetas:
-	# 			if np.fabs(t-theta) < COLLISION_THRES*np.pi/180:
-	# 				count += 1
-	# 		if count == 0:
-	# 			willCollide = False
-	# 		else:
-	# 			theta = rand.uniform(0,2*np.pi)
-
-	# 	prevExpansions.append((p_end[0], p_end[1], theta))
 
 	newState = [0,0]
 	newState[0] = d*np.cos(theta) + p_end[0] #X
@@ -235,35 +180,26 @@ def performDive(p_end, i, d, infoMap, HICs, prevExpansions):
 	if newState[1] >= m or newState[1] < 0:
 		#print("outside range", newState[1])
 		return -1
-
 	return newState
 
-# Extend dive to be distance d
-def extendDive(start, end, d):
-	theta = np.arctan2(float(end[1] - start[1]), float(end[0] - start[0]))
-	newEnd = [0,0]
-	newEnd[0] = int(d*np.cos(theta)) + start[0] #X
-	newEnd[1] = int(d*np.sin(theta)) + start[1] #Y
-	return newEnd
-
-### Other helper functions ###
 '''
 Selecting and adding nodes to hashtable
 '''
-def selectNodeToExpand(bins, HICs, maxTime):
+def selectNodeToExpand(bins, HICs):
 	randBinIndex = rand.choice(list(bins.keys())[:-1]) #Choose random bin, then choose node
-
 	while len(bins[randBinIndex]) == 0:
 		randBinIndex = rand.choice(list(bins.keys())[:-1])
-
 	return rand.choice(bins[randBinIndex])
 
 def addNodeToBins(bins, node, nodeTime, maxTime):
-	binIndex = int(nodeTime/(maxTime/NUM_BINS))
-	if binIndex > 5:
-		binIndex = 5
-	bins[binIndex].append(node)
+	x = node.state[0]
+	y = node.state[1]
+	binIndex = int((float(y)/m)*NUM_BINS)
 
+	if binIndex > NUM_BINS:
+		binIndex = NUM_BINS
+
+	bins[binIndex].append(node)
 
 def dynamicDive():
 	return rand.uniform(MIN_DIVE_LENGTH, MAX_DIVE_LENGTH) #Add dive angle later
@@ -276,71 +212,107 @@ def computeScore(visitedCells, infoMap):
 			score += infoMap[y][x] #return aggregate score
 	return score
 
-def endGame(endNode, maxTime):
-	return endNode.time > maxTime
+def endGame(endNode, goalSide):
+	if goalSide == 'r':
+		return endNode.state[1] > m - ENDGAME_THRES
+	else:
+		return endNode.state[1] < 0 + ENDGAME_THRES
 
 def getDist(state1, state2): #2D distance since all nodes are surface points
 	return ((state1[0]-state2[0])**2 + (state1[1] - state2[1])**2)**.5
 
-def getPath(endNode, numRobots, maxTime):
+def getPath(endNode, maxTime):
 	curNode = endNode
 	dist = 0
-	count = 0
 	path = []
-
-	while curNode.time > maxTime:
-		curNode = curNode.parent
 
 	while curNode.parent != None:
 		path.insert(0, curNode)
-		for i in range(numRobots):
-			dist += getDist(curNode.parent.end[i], curNode.end[i])
+		dist += getDist(curNode.parent.state, curNode.state)
 		curNode = curNode.parent
-		count += 1
 	path.insert(0, curNode)
 	return path, dist
 
 def prune(cNew,infoMap):
 	c = cNew.parent
-
 	if c.parent == None:
 		return
 
-	cells_ik = rc.getVisitedCells(c.parent.end, cNew.end, len(infoMap), len(infoMap[0]))
-
-	if c.score <= 1:
-		# print("Removing useless")
-		cNew.visitedCells = c.parent.visitedCells.union(cells_ik)
-		c.parent.children.append(cNew)
-		if cNew in c.children:
-			c.children.remove(cNew)
-		cNew.parent = c.parent
+	cells_ik = rc.getVisitedCells([c.parent.state], [cNew.state], len(infoMap), len(infoMap[0]))
 
 	O_ik = computeScore(cells_ik.difference(c.parent.visitedCells), infoMap)
-	t_ik = getDist(c.parent.end[0], cNew.end[0]) / AUV_SPEED
+	t_ik = getDist(c.parent.state, cNew.state) / ASV_SPEED
 	O_ijjk = c.score + cNew.score
 
-	if t_ik <= 0 or (cNew.time - c.time) <= 0:
-		return
-
 	if (O_ik / t_ik) > (O_ijjk / (cNew.time - c.time)):
-		# print("Pruning")
-		cells_ik = rc.getVisitedCells(c.parent.end, cNew.end, len(infoMap), len(infoMap[0]))
 		cNew.visitedCells = c.parent.visitedCells.union(cells_ik)
-		c.parent.children.append(cNew)
-		if cNew in c.children:
-			c.children.remove(cNew)
-		if c in c.parent.children:
-			c.parent.children.remove(c)
 		cNew.parent = c.parent
 		cNew.score = O_ik
 
+def savePath(mission_file, bestPath):
+	# Save path
+	with open('mission.txt', 'w') as f:
+		for p in bestPath:
+			f.write(str(round(p[0],3)) + ',' + str(round(p[1],3)) + '\n')
+
+	# Save lat/lons
+	latlons = []
+	with open(mission_file, 'w') as f:
+		for r,c in bestPath:
+			x = r*CELL_RES + origin_x
+			y = c*CELL_RES + origin_y
+			lat,lon = utm.to_latlon(x, y, 11, 'S')
+			latlons.append([lat, lon])
+			f.write(str(lat) + ',' + str(lon) + '\n')
+
+	X = [p[0] for p in bestPath]
+	Y = [p[1] for p in bestPath]
+	plt.plot(X,Y, '-o', color='r')
+
 # Test rrt
 def main():
+	#Initialize information maps
+	infoMap = maps.createInfoMap(E, m, n)
+	mapScore,_ = maps.scoreInfoMap(infoMap)
+
+	totalPath = []
+	totalScore = 0
+	totalTime = 0
+
 	numCycles = 2000
-	maxTime = 250
-	numRobots = 1
-	rrtSerial(True, numCycles, maxTime, numRobots)
+	startState = [0,0]
+	newMap = copy.deepcopy(infoMap)
+	maxTime = 20*60 #s
+
+	mu = 0
+	sigma = n/5.#For now...
+
+	while totalTime < maxTime:
+	# for i in range(2):
+		filteredMap = maps.filterMap(newMap, mu, sigma)
+		endState, endTime, pathList, pathCells, score = rrt(True, filteredMap, numCycles, -1, startState)
+		totalPath += pathList
+		totalScore += score
+		totalTime += endTime
+		
+		#Update mu
+		mu = 0
+		for x,y in pathList:
+			mu += x
+		mu = float(mu)/len(pathList)
+
+		#Adjust map
+		newMap = maps.adjustMap(pathCells, newMap)
+		startState = endState
+
+	print('Total path coverage:', float(totalScore)/mapScore)
+	#Save final path
+	plt.matshow(newMap,cmap='viridis') #show map in path graphing figure
+	plt.colorbar() #infoMap scale for figure
+
+	print("Original map shown")
+	savePath('rrt_test.csv', totalPath)
+	plt.show()
 
 if __name__ == "__main__":
 	main()
