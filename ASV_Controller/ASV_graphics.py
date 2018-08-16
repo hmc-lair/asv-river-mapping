@@ -27,8 +27,8 @@ IMAGE_WIDTH = 300
 IMAGE_HEIGHT = 200
 MAP_FILE = '../Maps/river_8-13.tif'
 
-MAP_WIDTH = 800
-MAP_HEIGHT = 600
+MAP_WIDTH = 700#800
+MAP_HEIGHT = 500#600
 
 POINT_RADIUS = 3
 
@@ -79,10 +79,15 @@ class ASV_graphics:
         self.set_origin_mode = False
 
         # Frames: Sidebar + Map Area
-        self.sidebar_frame = Frame(self.tk, width=400, relief='sunken', borderwidth=2)
+        self.sidebar_frame = Frame(self.tk, width=500, relief='sunken', borderwidth=2)
         self.map_frame = Frame(self.tk)
         self.sidebar_frame.pack(expand=True, fill='both', side='left', anchor='nw')
         self.map_frame.pack(expand=True, fill='both', side='right')
+
+
+        #######################################################################
+        # SIDEBAR FRAME
+        #######################################################################
 
         # GPS Coordinates
         self.gps_title = Label(self.sidebar_frame, anchor='w', text='ASV GPS Information', font='Helvetica 14 bold').pack()
@@ -112,13 +117,15 @@ class ASV_graphics:
 
         # 2) Mission planning
         self.mission_title = Label(self.sidebar_frame, anchor='w', text='Mission Planning', font='Helvetica 14 bold').pack()
-        scrollbar = Scrollbar(self.sidebar_frame)
-        scrollbar.pack(side='right')
-        self.w_name = Label(self.sidebar_frame, text='')
-        self.wp_list = Listbox(self.sidebar_frame, width=30, yscrollcommand=scrollbar.set)
-        self.wp_list.pack()
+        self.mission_frame = Frame(self.sidebar_frame)
+        self.scrollbar = Scrollbar(self.mission_frame)
+        self.scrollbar.pack(side='right')
+        self.w_name = Label(self.mission_frame, text='')
+        self.wp_list = Listbox(self.mission_frame, width=30, height=15, yscrollcommand=self.scrollbar.set)
+        self.wp_list.pack(side='left')
         self.wp_list.bind('<<ListboxSelect>>', self.on_waypoint_selection)
-        scrollbar.config(command = self.wp_list.yview)
+        self.scrollbar.config(command = self.wp_list.yview)
+        self.mission_frame.pack()
 
         self.mission_file_frame = Frame(self.sidebar_frame)
         self.mission_file_frame.pack()
@@ -130,18 +137,59 @@ class ASV_graphics:
         self.mission_remove_wps = Button(self.sidebar_frame, anchor='w', text='Remove Waypoints', command=self.on_toggle_remove_wps)
         self.mission_remove_wps.pack()
 
-        # Map Configuration
-        self.map_config = Label(self.sidebar_frame, anchor='w', text='Configuration', font='Helvetica 14 bold').pack()
+
+        #######################################################################
+        # MAP CANVAS
+        #######################################################################
+
+        # Load map image
+        pilImg = Image.open(MAP_FILE)
+        pilImg = pilImg.resize((MAP_WIDTH,MAP_HEIGHT), Image.ANTIALIAS)
+        self.img = ImageTk.PhotoImage(pilImg)
+        
+        # map
+        self.canvas = Canvas(self.map_frame, width=MAP_WIDTH, height=MAP_HEIGHT)
+        self.canvas.create_image(0,0, image=self.img, anchor=NW)
+        self.canvas.pack(side='top')
+        self.canvas.bind("<Button 1>", self.on_location_click)
+        self.origin_marker1 = self.canvas.create_line(0, -10, 0, 10, fill='black', width=2) #to create a cross
+        self.origin_marker2 = self.canvas.create_line(-10, 0, 10, 0, fill='black', width=2)
+
+        #######################################################################
+        # CONFIGURATION FRAME
+        #######################################################################
+
+        self.control_config_frame = Frame(self.map_frame, height=15)
+        self.control_config_frame.pack(side='left')
+        self.border_frame = Frame(self.map_frame, height=15)
+        self.border_frame.pack(side='right')
+        self.compass_frame = Frame(self.map_frame, height=15)
+        self.compass_frame.pack(side='right')
+
+        # Tracing border
+        self.border_label = Label(self.border_frame, anchor='w', text='Border Configuration', font='Helvetica 14 bold').pack()
+        self.border = Button(self.border_frame, anchor='w', text='Trace Border', command=self.on_toggle_border)
+        self.border.pack()
+        self.clear_border = Button(self.border_frame, anchor='w', text='Clear Border', command=self.on_clear_border).pack()
+        self.load_border = Button(self.border_frame, anchor='w', text='Load Border', command=self.on_load_border).pack()
+        self.save_border = Button(self.border_frame, anchor='w', text='Save Border', command=self.on_save_border).pack()
+
+        # Compass calibration
+        self.compass_label = Label(self.compass_frame, anchor='w', text='Compass Calibration', font='Helvetica 14 bold').pack()
+        self.heading_frame = Frame(self.compass_frame)
+        self.heading_frame.pack()
+        self.heading_offset_label = Label(self.heading_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
+        self.heading_offset = Entry(self.heading_frame, width=6)
+        self.heading_offset.insert(END, '-20')
+        self.heading_offset.pack(side='right')
+        self.set_heading_offset = Button(self.compass_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset).pack()
+
+        # Control parameters/speed
+        self.control_config = Label(self.control_config_frame, anchor='w', text='Control Parameters', font='Helvetica 14 bold').pack()
         # self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
         # self.origin.pack()
-        # self.set_heading_offset = Button(self.sidebar_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset)
-        # self.set_heading_offset.pack()
-        # self.heading_offset_label = Label(self.sidebar_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
-        # self.heading_offset = Entry(self.sidebar_frame, width=10)
-        # self.heading_offset.insert(END, '-20')
-        # self.heading_offset.pack(side='right')
 
-        self.speed_frame = Frame(self.sidebar_frame)
+        self.speed_frame = Frame(self.control_config_frame)
         self.speed_frame.pack()
         # self.set_desired_speed = Button(self.speed_frame, anchor='w', text='Set Desired Speed', command=self.on_set_desired_speed)
         # self.set_desired_speed.pack()
@@ -151,11 +199,7 @@ class ASV_graphics:
         self.desired_speed.bind('<Return>', self.on_set_desired_speed)
         self.desired_speed.pack(side='right')
 
-        # Control Params
-        self.set_control_params = Button(self.sidebar_frame, anchor='w', text='Set Control Params', command=self.on_set_control)
-        self.set_control_params.pack()
-
-        self.Kp_frame = Frame(self.sidebar_frame)
+        self.Kp_frame = Frame(self.control_config_frame)
         self.Kp_frame.pack()
         self.Kp_ang_frame = Frame(self.Kp_frame)
         self.Kp_ang_frame.pack(side='left')
@@ -170,7 +214,7 @@ class ASV_graphics:
         self.Kp_nom.insert(END, '500')
         self.Kp_nom.pack(side='right')
 
-        self.throttle_frame = Frame(self.sidebar_frame)
+        self.throttle_frame = Frame(self.control_config_frame)
         self.throttle_frame.pack()
         self.fwd_limit_frame = Frame(self.throttle_frame)
         self.fwd_limit_frame.pack(side='left')
@@ -185,26 +229,9 @@ class ASV_graphics:
         self.bwd_limit.insert(END, '1000')
         self.bwd_limit.pack(side='right')
 
-        # Tracing border
-        self.border = Button(self.sidebar_frame, anchor='w', text='Trace Border', command=self.on_toggle_border)
-        self.border.pack()
-        self.clear_border = Button(self.sidebar_frame, anchor='w', text='Clear Border', command=self.on_clear_border).pack()
-        self.load_border = Button(self.sidebar_frame, anchor='w', text='Load Border', command=self.on_load_border).pack()
-        self.save_border = Button(self.sidebar_frame, anchor='w', text='Save Border', command=self.on_save_border).pack()
+        self.set_control_params = Button(self.control_config_frame, anchor='w', text='Set Control Params', command=self.on_set_control).pack()
 
-        # Load map image
-        pilImg = Image.open(MAP_FILE)
-        pilImg = pilImg.resize((MAP_WIDTH,MAP_HEIGHT), Image.ANTIALIAS)
-        self.img = ImageTk.PhotoImage(pilImg)
-        
-        # map
-        self.canvas = Canvas(self.map_frame, width=MAP_WIDTH, height=MAP_HEIGHT)
-        self.canvas.create_image(0,0, image=self.img, anchor=NW)
-        self.canvas.pack()
-        self.canvas.bind("<Button 1>", self.on_location_click)
 
-        self.origin_marker1 = self.canvas.create_line(0, -10, 0, 10, fill='black', width=2)
-        self.origin_marker2 = self.canvas.create_line(-10, 0, 10, 0, fill='black', width=2)
 
     ###########################################################################
     # Location Conversions
@@ -237,8 +264,13 @@ class ASV_graphics:
             if self.controller.mode == 'HARDWARE MODE':
                 msg = '!ABORTMISSION'
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, msg.encode())
+                msg = '!CLEARWPS' #also clear waypoints
+                self.controller.local_xbee.send_data_async(self.controller.boat_xbee, msg.encode())
             elif self.controller.mode == "SIM MODE":
                 msg = '!ABORTMISSION'
+                xbee_msg= XBeeModel.message.XBeeMessage(msg.encode(), None, None)
+                self.controller.robot.xbee_callback(xbee_msg)
+                msg = '!CLEARWPS' #also clear waypoints
                 xbee_msg= XBeeModel.message.XBeeMessage(msg.encode(), None, None)
                 self.controller.robot.xbee_callback(xbee_msg)
            
