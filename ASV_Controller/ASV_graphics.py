@@ -32,6 +32,29 @@ MAP_HEIGHT = 500#600
 
 POINT_RADIUS = 3
 
+'''
+Pop-up window for clearing waypoints (are you sure you want to do this)
+'''
+class popupWindow(object):
+    def __init__(self,master):
+        top=self.top=Toplevel(master)
+        self.l=Label(top,text="Remove all waypoints?").pack()
+        response = ''
+        self.yes=Button(top,text='Yes',command=self.cleanup_yes).pack(side='left')
+        self.no=Button(top,text='No',command=self.cleanup_no).pack(side='right')
+        self.response = None
+
+    def cleanup_yes(self):
+        self.response = True
+        self.top.destroy()
+
+    def cleanup_no(self):
+        self.response = False
+        self.top.destroy()
+
+'''
+Main class for ASV graphics
+'''
 class ASV_graphics:
     def __init__(self, controller):
         # Load map for display/GPS conversions
@@ -66,6 +89,7 @@ class ASV_graphics:
         self.add_wps_mode = False
         self.remove_wps_mode = False
         self.running_mission_mode = False
+        self.repeat_mission_mode = False
         self.set_border_mode = False
         self.wp_markers = []
         self.wp_labels = []
@@ -106,6 +130,13 @@ class ASV_graphics:
         # 1) Go to map location
         # self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
         # self.control_wp_dxdy.pack()
+
+        self.auv_status = Label(self.sidebar_frame, anchor='w', text='AUV Status: STOPPED', fg="red")
+        self.auv_status.pack()
+
+        self.repeat_mission_label = Label(self.sidebar_frame, anchor='w', text='Repeat Mission: NO', fg="red")
+        self.repeat_mission_label.pack()
+
         self.start_frame = Frame(self.sidebar_frame)
         self.start_frame.pack()
         self.start_stop = Button(self.start_frame, anchor='w', text='Start ASV', command=self.on_startstop)
@@ -113,7 +144,15 @@ class ASV_graphics:
         self.mission = Button(self.start_frame, anchor='w', text='Start Mission', command=self.on_toggle_mission)
         self.mission.pack(side='right')
 
-        self.clear_wps = Button(self.sidebar_frame, anchor='w', text='Clear All Waypoints', command=self.on_clear_wps).pack()
+        self.repeat_frame = Frame(self.sidebar_frame)
+        self.repeat_frame.pack()
+        self.repeat_label = Label(self.repeat_frame, anchor='w', text='# Repeats').pack(side='left')
+        self.repeat_times = Entry(self.repeat_frame, width=5)
+        self.repeat_times.insert(END, '10')
+        self.repeat_times.pack(side='right')
+        self.repeat_mission = Button(self.sidebar_frame, anchor='w', text='Enable Repeat Mission', command=self.on_toggle_repeat_mission)
+        self.repeat_mission.pack()
+
 
         # 2) Mission planning
         self.mission_title = Label(self.sidebar_frame, anchor='w', text='Mission Planning', font='Helvetica 14 bold').pack()
@@ -121,7 +160,7 @@ class ASV_graphics:
         self.scrollbar = Scrollbar(self.mission_frame)
         self.scrollbar.pack(side='right')
         self.w_name = Label(self.mission_frame, text='')
-        self.wp_list = Listbox(self.mission_frame, width=30, height=15, yscrollcommand=self.scrollbar.set)
+        self.wp_list = Listbox(self.mission_frame, width=30, height=10, yscrollcommand=self.scrollbar.set)
         self.wp_list.pack(side='left')
         self.wp_list.bind('<<ListboxSelect>>', self.on_waypoint_selection)
         self.scrollbar.config(command = self.wp_list.yview)
@@ -130,13 +169,15 @@ class ASV_graphics:
         self.mission_file_frame = Frame(self.sidebar_frame)
         self.mission_file_frame.pack()
         self.load_mission = Button(self.mission_file_frame, anchor='w', text='Load Mission File', command=self.on_load_mission).pack(side='left')
-        self.save_mission = Button(self.mission_file_frame, anchor='w', text='Save Mission', command=self.on_save_mission).pack(side='right')
+        self.save_mission = Button(self.mission_file_frame, anchor='w', text='Save Mission to File', command=self.on_save_mission).pack(side='right')
 
         self.mission_add_wps = Button(self.sidebar_frame, anchor='w', text='Add Waypoints', command=self.on_toggle_add_wps)
         self.mission_add_wps.pack()
         self.mission_remove_wps = Button(self.sidebar_frame, anchor='w', text='Remove Waypoints', command=self.on_toggle_remove_wps)
         self.mission_remove_wps.pack()
 
+        self.clear_wps = Button(self.sidebar_frame, anchor='w', text='Clear All Waypoints', command=self.on_clear_wps)
+        self.clear_wps.pack()
 
         #######################################################################
         # MAP CANVAS
@@ -282,10 +323,21 @@ class ASV_graphics:
 
             self.mission_wps = []
             print(self.wp_list.get(0, END))
-            for p in self.wp_list.get(0, END):
-                lat, lon = list(map(float, p.split(',')))
-                x, y,_, _ = utm.from_latlon(lat, lon)
-                self.mission_wps.append((x,y))
+
+            if self.repeat_mission_mode:
+                num_repeats = int(self.repeat_times.get())
+                for i in range(num_repeats):
+                    for p in self.wp_list.get(0, END):
+                        lat, lon = list(map(float, p.split(',')))
+                        x, y,_, _ = utm.from_latlon(lat, lon)
+                        self.mission_wps.append((x,y))
+            else:
+                for p in self.wp_list.get(0, END):
+                    lat, lon = list(map(float, p.split(',')))
+                    x, y,_, _ = utm.from_latlon(lat, lon)
+                    self.mission_wps.append((x,y))
+
+            print('Waypoints:', self.mission_wps)
 
             if self.controller.mode == 'HARDWARE MODE':
                 for x, y in self.mission_wps:
@@ -293,8 +345,6 @@ class ASV_graphics:
                     way_point_msg = "!WP, %f, %f" % (x, y)
                     print(way_point_msg)
                     self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
-                # print('Waiting for wps to send...')
-                # time.sleep(2)
                 start_mission_msg = "!STARTMISSION"
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, start_mission_msg.encode())
             else:
@@ -303,8 +353,6 @@ class ASV_graphics:
                     way_point_msg = "!WP, %f, %f" % (x, y)
                     xbee_msg = XBeeModel.message.XBeeMessage(way_point_msg.encode(), None, None)
                     self.controller.robot.xbee_callback(xbee_msg)
-                print('Waiting for wps to send...')
-                time.sleep(2)
                 start_mission_msg = "!STARTMISSION"
                 xbee_msg = XBeeModel.message.XBeeMessage(start_mission_msg.encode(), None, None)
                 self.controller.robot.xbee_callback(xbee_msg)
@@ -317,7 +365,7 @@ class ASV_graphics:
         else:
             self.add_wps_mode = True
             self.mission_add_wps.configure(text='Done Selecting Waypoints')
-        print('Mission planning mode: ', self.add_wps_mode)
+        print('Add wps mode: ', self.add_wps_mode)
 
     def on_toggle_remove_wps(self):
         if self.remove_wps_mode:
@@ -327,6 +375,19 @@ class ASV_graphics:
             self.remove_wps_mode = True
             self.mission_remove_wps.configure(text='Done Removing Waypoints')
         print('Remove wps mode: ', self.remove_wps_mode)
+
+    def on_toggle_repeat_mission(self):
+        if self.repeat_mission_mode:
+            self.repeat_mission_mode = False
+            self.repeat_mission.configure(text='Enable Repeat Mission')
+        else:
+            self.repeat_mission_mode = True
+            self.repeat_mission.configure(text='Disable Repeat Mission')
+        print('Repeat mission mode: ', self.repeat_mission_mode)
+        repeat_text = 'NO'
+        if self.repeat_mission_mode:
+            repeat_text = 'YES'
+        self.repeat_mission_label['text'] = 'Repeat Mission: ' + repeat_text
 
     def on_waypoint_selection(self, event):
         selection = self.wp_list.curselection()
@@ -348,23 +409,31 @@ class ASV_graphics:
             print('wp: ', lat, lon)
 
     def on_clear_wps(self):
-        print('Clearing all waypoints...')
-        command_msg = "!CLEARWPS"
-        if self.controller.mode == 'HARDWARE MODE':
-            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
-        else:
-            xbee_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
-            self.controller.robot.xbee_callback(xbee_msg)
+        self.w=popupWindow(self.sidebar_frame)
+        self.clear_wps['state'] = 'disabled'
+        self.sidebar_frame.wait_window(self.w.top)
+        self.clear_wps['state'] = 'normal'
 
-        #Clear list and add waypoints
-        if self.wp_list.index('end') != 0:
-            self.wp_list.delete(0, 'end')
-            for marker in self.wp_markers:
-                self.canvas.delete(marker)
-            for label in self.wp_labels:
-                self.canvas.delete(label)
-            self.wp_markers = []
-            self.wp_labels = []
+        if self.w.response:
+            print('Clearing all waypoints...')
+            command_msg = "!CLEARWPS"
+            if self.controller.mode == 'HARDWARE MODE':
+                self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
+            else:
+                xbee_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
+                self.controller.robot.xbee_callback(xbee_msg)
+
+            #Clear list and add waypoints
+            if self.wp_list.index('end') != 0:
+                self.wp_list.delete(0, 'end')
+                for marker in self.wp_markers:
+                    self.canvas.delete(marker)
+                for label in self.wp_labels:
+                    self.canvas.delete(label)
+                self.wp_markers = []
+                self.wp_labels = []
+        else:
+            print('Cancelling clear waypoint request')
 
     def on_load_mission(self):
         mission_file = input('Mission file name? ') #example: sample_mission (file @ Missions/sample_mission.csv)
@@ -494,6 +563,11 @@ class ASV_graphics:
                 self.controller.robot.xbee_callback(xbee_msg)
             self.start_stop['text'] = 'Start ASV'
             self.robot_stopped = True
+
+        status_text = 'STARTED'
+        if self.robot_stopped:
+            status_text = 'STOPPED'
+        self.auv_status['text'] = 'AUV Status: ' + status_text
 
     def on_quit(self):
         print('QUIT!')
@@ -625,6 +699,7 @@ class ASV_graphics:
         x = origin[0] + (p[0]-origin[0])*np.cos(theta) + (p[1]-origin[1])*np.sin(theta)
         y = origin[1] - (p[0]-origin[0])*np.sin(theta) + (p[1]-origin[1])*np.cos(theta)
         return [x,y]
+
 
 if __name__ == '__main__':
     my_gui = ASV_graphics(None)
