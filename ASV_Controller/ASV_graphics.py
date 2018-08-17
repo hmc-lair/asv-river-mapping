@@ -160,7 +160,7 @@ class ASV_graphics:
         self.scrollbar = Scrollbar(self.mission_frame)
         self.scrollbar.pack(side='right')
         self.w_name = Label(self.mission_frame, text='')
-        self.wp_list = Listbox(self.mission_frame, width=30, height=10, yscrollcommand=self.scrollbar.set)
+        self.wp_list = Listbox(self.mission_frame, width=30, height=12, yscrollcommand=self.scrollbar.set)
         self.wp_list.pack(side='left')
         self.wp_list.bind('<<ListboxSelect>>', self.on_waypoint_selection)
         self.scrollbar.config(command = self.wp_list.yview)
@@ -221,7 +221,7 @@ class ASV_graphics:
         self.heading_frame.pack()
         self.heading_offset_label = Label(self.heading_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
         self.heading_offset = Entry(self.heading_frame, width=6)
-        self.heading_offset.insert(END, '-20')
+        self.heading_offset.insert(END, '-12')
         self.heading_offset.pack(side='right')
         self.set_heading_offset = Button(self.compass_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset).pack()
 
@@ -587,7 +587,6 @@ class ASV_graphics:
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, heading_msg.encode())
 
     def on_set_desired_speed(self, event):
-        print('PRESSED ENTER!')
         speed_msg = '!SETSPEED, %f' % float(self.desired_speed.get())
         print(speed_msg)
         if self.controller.mode == 'HARDWARE MODE':
@@ -598,6 +597,12 @@ class ASV_graphics:
         print(control_msg)
         if self.controller.mode == 'HARDWARE MODE':
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, control_msg.encode())
+
+        #Also send speed..
+        speed_msg = '!SETSPEED, %f' % float(self.desired_speed.get())
+        print(speed_msg)
+        if self.controller.mode == 'HARDWARE MODE':
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, speed_msg.encode())
 
     ###########################################################################
     # Updating GUI
