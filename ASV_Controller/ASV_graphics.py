@@ -22,15 +22,45 @@ import math
 # IMAGE_HEIGHT = 700
 # MAP_FILE = '../Maps/lake_7-27.tif'
 
-IMAGE_WIDTH = 300
-IMAGE_HEIGHT = 200
-MAP_FILE = '../Maps/river_8-13.tif'
+# IMAGE_WIDTH = 300
+# IMAGE_HEIGHT = 200
+# MAP_FILE = '../Maps/river_8-13.tif'
 
-MAP_WIDTH = 800
-MAP_HEIGHT = 600
+IMAGE_WIDTH = 200
+IMAGE_HEIGHT = 100
+MAP_FILE = '../Maps/output.tif' #perhaps for last deployment
 
-POINT_RADIUS = 3
+MAP_WIDTH = 600#800
+MAP_HEIGHT = 400#600
 
+POINT_RADIUS = 5
+
+point_track_color = 'red'
+transect_color = 'orange'
+
+'''
+Pop-up window for clearing waypoints (are you sure you want to do this)
+'''
+class popupWindow(object):
+    def __init__(self,master):
+        top=self.top=Toplevel(master)
+        self.l=Label(top,text="Remove all waypoints?").pack()
+        response = ''
+        self.yes=Button(top,text='Yes',command=self.cleanup_yes).pack(side='left')
+        self.no=Button(top,text='No',command=self.cleanup_no).pack(side='right')
+        self.response = None
+
+    def cleanup_yes(self):
+        self.response = True
+        self.top.destroy()
+
+    def cleanup_no(self):
+        self.response = False
+        self.top.destroy()
+
+'''
+Main class for ASV graphics
+'''
 class ASV_graphics:
     def __init__(self, controller):
         # Load map for display/GPS conversions
@@ -65,6 +95,7 @@ class ASV_graphics:
         self.add_wps_mode = False
         self.remove_wps_mode = False
         self.running_mission_mode = False
+        self.repeat_mission_mode = False
         self.set_border_mode = False
         self.wp_markers = []
         self.wp_labels = []
@@ -78,10 +109,15 @@ class ASV_graphics:
         self.set_origin_mode = False
 
         # Frames: Sidebar + Map Area
-        self.sidebar_frame = Frame(self.tk, width=400, relief='sunken', borderwidth=2)
+        self.sidebar_frame = Frame(self.tk, width=500, relief='sunken', borderwidth=2)
         self.map_frame = Frame(self.tk)
         self.sidebar_frame.pack(expand=True, fill='both', side='left', anchor='nw')
         self.map_frame.pack(expand=True, fill='both', side='right')
+
+
+        #######################################################################
+        # SIDEBAR FRAME
+        #######################################################################
 
         # GPS Coordinates
         self.gps_title = Label(self.sidebar_frame, anchor='w', text='ASV GPS Information', font='Helvetica 14 bold').pack()
@@ -100,6 +136,22 @@ class ASV_graphics:
         # 1) Go to map location
         # self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
         # self.control_wp_dxdy.pack()
+
+        self.auv_status = Label(self.sidebar_frame, anchor='w', text='AUV Status: STOPPED', fg="red")
+        self.auv_status.pack()
+
+        self.repeat_mission_label = Label(self.sidebar_frame, anchor='w', text='Repeat Mission: NO', fg="red")
+        self.repeat_mission_label.pack()
+
+        self.repeat_frame = Frame(self.sidebar_frame)
+        self.repeat_frame.pack()
+        self.repeat_label = Label(self.repeat_frame, anchor='w', text='# Repeats').pack(side='left')
+        self.repeat_times = Entry(self.repeat_frame, width=5)
+        self.repeat_times.insert(END, '10')
+        self.repeat_times.pack(side='right')
+        self.repeat_mission = Button(self.sidebar_frame, anchor='w', text='Enable Repeat Mission', command=self.on_toggle_repeat_mission)
+        self.repeat_mission.pack()
+
         self.start_frame = Frame(self.sidebar_frame)
         self.start_frame.pack()
         self.start_stop = Button(self.start_frame, anchor='w', text='Start ASV', command=self.on_startstop)
@@ -107,40 +159,90 @@ class ASV_graphics:
         self.mission = Button(self.start_frame, anchor='w', text='Start Mission', command=self.on_toggle_mission)
         self.mission.pack(side='right')
 
-        self.clear_wps = Button(self.sidebar_frame, anchor='w', text='Clear All Waypoints', command=self.on_clear_wps).pack()
 
         # 2) Mission planning
         self.mission_title = Label(self.sidebar_frame, anchor='w', text='Mission Planning', font='Helvetica 14 bold').pack()
-        scrollbar = Scrollbar(self.sidebar_frame)
-        scrollbar.pack(side='right')
-        self.w_name = Label(self.sidebar_frame, text='')
-        self.wp_list = Listbox(self.sidebar_frame, width=30, yscrollcommand=scrollbar.set)
-        self.wp_list.pack()
+        self.mission_disclaimer = Label(self.sidebar_frame, 
+            anchor='w', text='Red=Point Tracking, Orange=Transect.\nClick on WP in map to change color.', font='Helvetica 10 italic').pack()
+        self.mission_frame = Frame(self.sidebar_frame)
+        self.scrollbar = Scrollbar(self.mission_frame)
+        self.scrollbar.pack(side='right')
+        self.w_name = Label(self.mission_frame, text='')
+        self.wp_list = Listbox(self.mission_frame, width=30, height=12, yscrollcommand=self.scrollbar.set)
+        self.wp_list.pack(side='left')
         self.wp_list.bind('<<ListboxSelect>>', self.on_waypoint_selection)
-        scrollbar.config(command = self.wp_list.yview)
+        self.scrollbar.config(command = self.wp_list.yview)
+        self.mission_frame.pack()
 
         self.mission_file_frame = Frame(self.sidebar_frame)
         self.mission_file_frame.pack()
         self.load_mission = Button(self.mission_file_frame, anchor='w', text='Load Mission File', command=self.on_load_mission).pack(side='left')
-        self.save_mission = Button(self.mission_file_frame, anchor='w', text='Save Mission', command=self.on_save_mission).pack(side='right')
+        self.save_mission = Button(self.mission_file_frame, anchor='w', text='Save Mission to File', command=self.on_save_mission).pack(side='right')
 
         self.mission_add_wps = Button(self.sidebar_frame, anchor='w', text='Add Waypoints', command=self.on_toggle_add_wps)
         self.mission_add_wps.pack()
         self.mission_remove_wps = Button(self.sidebar_frame, anchor='w', text='Remove Waypoints', command=self.on_toggle_remove_wps)
         self.mission_remove_wps.pack()
 
-        # Map Configuration
-        self.map_config = Label(self.sidebar_frame, anchor='w', text='Configuration', font='Helvetica 14 bold').pack()
+        self.clear_wps = Button(self.sidebar_frame, anchor='w', text='Clear All Waypoints', command=self.on_clear_wps)
+        self.clear_wps.pack()
+
+        #######################################################################
+        # MAP CANVAS
+        #######################################################################
+
+        # Load map image
+        pilImg = Image.open(MAP_FILE)
+        pilImg = pilImg.resize((MAP_WIDTH,MAP_HEIGHT), Image.ANTIALIAS)
+        self.img = ImageTk.PhotoImage(pilImg)
+        
+        # map
+        self.canvas = Canvas(self.map_frame, width=MAP_WIDTH, height=MAP_HEIGHT)
+        self.canvas.create_image(0,0, image=self.img, anchor=NW)
+        self.canvas.pack(side='top')
+        self.canvas.bind("<Button 1>", self.on_location_click)
+        self.origin_marker1 = self.canvas.create_line(0, -10, 0, 10, fill='black', width=2) #to create a cross
+        self.origin_marker2 = self.canvas.create_line(-10, 0, 10, 0, fill='black', width=2)
+
+        #######################################################################
+        # CONFIGURATION FRAME
+        #######################################################################
+
+        self.control_config_frame = Frame(self.map_frame, height=15)
+        self.control_config_frame.pack(side='left')
+
+        self.misc_frame = Frame(self.map_frame)
+        self.misc_frame.pack(side='right')
+
+        self.border_frame = Frame(self.misc_frame, height=15)
+        self.border_frame.pack(side='top')
+        self.compass_frame = Frame(self.misc_frame, height=15)
+        self.compass_frame.pack(side='bottom')
+
+        # Tracing border
+        self.border_label = Label(self.border_frame, anchor='w', text='Border Configuration', font='Helvetica 14 bold').pack()
+        self.border = Button(self.border_frame, anchor='w', text='Trace Border', command=self.on_toggle_border)
+        self.border.pack()
+        self.clear_border = Button(self.border_frame, anchor='w', text='Clear Border', command=self.on_clear_border).pack()
+        self.load_border = Button(self.border_frame, anchor='w', text='Load Border', command=self.on_load_border).pack()
+        self.save_border = Button(self.border_frame, anchor='w', text='Save Border', command=self.on_save_border).pack()
+
+        # Compass calibration
+        self.compass_label = Label(self.compass_frame, anchor='w', text='Compass Calibration', font='Helvetica 14 bold').pack()
+        self.heading_frame = Frame(self.compass_frame)
+        self.heading_frame.pack()
+        self.heading_offset_label = Label(self.heading_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
+        self.heading_offset = Entry(self.heading_frame, width=6)
+        self.heading_offset.insert(END, '-12')
+        self.heading_offset.pack(side='right')
+        self.set_heading_offset = Button(self.compass_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset).pack()
+
+        # Control parameters/speed
+        self.control_config = Label(self.control_config_frame, anchor='w', text='Control Parameters', font='Helvetica 14 bold').pack()
         # self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
         # self.origin.pack()
-        # self.set_heading_offset = Button(self.sidebar_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset)
-        # self.set_heading_offset.pack()
-        # self.heading_offset_label = Label(self.sidebar_frame, anchor='w', text='Heading Offset (deg)').pack(side='left')
-        # self.heading_offset = Entry(self.sidebar_frame, width=10)
-        # self.heading_offset.insert(END, '-20')
-        # self.heading_offset.pack(side='right')
 
-        self.speed_frame = Frame(self.sidebar_frame)
+        self.speed_frame = Frame(self.control_config_frame)
         self.speed_frame.pack()
         # self.set_desired_speed = Button(self.speed_frame, anchor='w', text='Set Desired Speed', command=self.on_set_desired_speed)
         # self.set_desired_speed.pack()
@@ -151,27 +253,61 @@ class ASV_graphics:
         self.desired_speed.bind('<Return>', self.on_set_desired_speed)
         self.desired_speed.pack(side='right')
 
-        # Control Params
-        self.set_control_params = Button(self.sidebar_frame, anchor='w', text='Set Control Params', command=self.on_set_control)
-        self.set_control_params.pack()
+        #######################################################################
+        # Point Tracking Parameters
+        #######################################################################
 
-        self.Kp_frame = Frame(self.sidebar_frame)
+        self.Kp_frame = Frame(self.control_config_frame)
         self.Kp_frame.pack()
-        self.Kp_ang_frame = Frame(self.Kp_frame)
-        self.Kp_ang_frame.pack(side='left')
-        self.Kp_ang_label = Label(self.Kp_ang_frame, anchor='w', text='K_ang').pack(side='left')
-        self.Kp_ang = Entry(self.Kp_ang_frame, width=5)
 
+        self.Kp_ang_label = Label(self.Kp_frame, anchor='w', text='K_ang').pack(side='left')
+        self.Kp_ang = Entry(self.Kp_frame, width=5)
         self.Kp_ang.insert(END, '800')
-        self.Kp_ang.pack(side='right')
-        self.Kp_nom_frame = Frame(self.Kp_frame)
-        self.Kp_nom_frame.pack(side='right')
-        self.Kp_nom_label = Label(self.Kp_nom_frame, anchor='w', text='K_nom').pack(side='left')
-        self.Kp_nom = Entry(self.Kp_nom_frame, width=5)
-        self.Kp_nom.insert(END, '1000')
-        self.Kp_nom.pack(side='right')
+        self.Kp_ang.pack(side='left')
+        self.Kp_nom_label = Label(self.Kp_frame, anchor='w', text='K_nom').pack(side='left')
+        self.Kp_nom = Entry(self.Kp_frame, width=5)
+        self.Kp_nom.insert(END, '500')
+        self.Kp_nom.pack(side='left')
 
-        self.throttle_frame = Frame(self.sidebar_frame)
+        #######################################################################
+        # Transect Parameters
+        #######################################################################
+
+        self.transect_frame1 = Frame(self.control_config_frame)
+        self.transect_frame1.pack()
+        self.K_v_label = Label(self.transect_frame1, anchor='w', text='K_v').pack(side='left')
+        self.K_v = Entry(self.transect_frame1, width=5)
+        self.K_v.insert(END, '1')
+        self.K_v.pack(side='left')
+        self.K_latAng_label = Label(self.transect_frame1, anchor='w', text='K_latAng').pack(side='left')
+        self.K_latAng = Entry(self.transect_frame1, width=5)
+        self.K_latAng.insert(END, '2')
+        self.K_latAng.pack(side='left')
+        self.K_vert_label = Label(self.transect_frame1, anchor='w', text='K_vert').pack(side='left')
+        self.K_vert = Entry(self.transect_frame1, width=5)
+        self.K_vert.insert(END, '3')
+        self.K_vert.pack(side='left')
+
+        self.transect_frame2 = Frame(self.control_config_frame)
+        self.transect_frame2.pack()
+        self.v_rate_label = Label(self.transect_frame2, anchor='w', text='v_rate').pack(side='left')
+        self.v_rate = Entry(self.transect_frame2, width=5)
+        self.v_rate.insert(END, '4')
+        self.v_rate.pack(side='left')
+        self.a_rate_label = Label(self.transect_frame2, anchor='w', text='a_rate').pack(side='left')
+        self.a_rate = Entry(self.transect_frame2, width=5)
+        self.a_rate.insert(END, '5')
+        self.a_rate.pack(side='left')
+        self.vx_des_label = Label(self.transect_frame2, anchor='w', text='vx_des').pack(side='left')
+        self.vx_des = Entry(self.transect_frame2, width=5)
+        self.vx_des.insert(END, '6')
+        self.vx_des.pack(side='left')
+
+        #######################################################################
+        # Throttle Thresholds
+        #######################################################################
+
+        self.throttle_frame = Frame(self.control_config_frame)
         self.throttle_frame.pack()
         self.fwd_limit_frame = Frame(self.throttle_frame)
         self.fwd_limit_frame.pack(side='left')
@@ -186,26 +322,7 @@ class ASV_graphics:
         self.bwd_limit.insert(END, '1000')
         self.bwd_limit.pack(side='right')
 
-        # Tracing border
-        self.border = Button(self.sidebar_frame, anchor='w', text='Trace Border', command=self.on_toggle_border)
-        self.border.pack()
-        self.clear_border = Button(self.sidebar_frame, anchor='w', text='Clear Border', command=self.on_clear_border).pack()
-        self.load_border = Button(self.sidebar_frame, anchor='w', text='Load Border', command=self.on_load_border).pack()
-        self.save_border = Button(self.sidebar_frame, anchor='w', text='Save Border', command=self.on_save_border).pack()
-
-        # Load map image
-        pilImg = Image.open(MAP_FILE)
-        pilImg = pilImg.resize((MAP_WIDTH,MAP_HEIGHT), Image.ANTIALIAS)
-        self.img = ImageTk.PhotoImage(pilImg)
-        
-        # map
-        self.canvas = Canvas(self.map_frame, width=MAP_WIDTH, height=MAP_HEIGHT)
-        self.canvas.create_image(0,0, image=self.img, anchor=NW)
-        self.canvas.pack()
-        self.canvas.bind("<Button 1>", self.on_location_click)
-
-        self.origin_marker1 = self.canvas.create_line(0, -10, 0, 10, fill='black', width=2)
-        self.origin_marker2 = self.canvas.create_line(-10, 0, 10, 0, fill='black', width=2)
+        self.set_control_params = Button(self.control_config_frame, anchor='w', text='Set Control Params', command=self.on_set_control).pack()
 
     ###########################################################################
     # Location Conversions
@@ -229,6 +346,25 @@ class ASV_graphics:
     # Mission Callbacks
     ###########################################################################
 
+    def get_mission_wps(self, num_repeats):
+        wps = []
+        for i in range(num_repeats):
+            count = 0
+            for p in self.wp_list.get(0, END):
+                lat, lon = list(map(float, p.split(',')))
+                x, y,_, _ = utm.from_latlon(lat, lon)
+
+                #get color
+                color = self.canvas.itemcget(self.wp_markers[count], 'fill')
+                mode = 1 #point track
+                if color == transect_color:
+                    mode = 2 #transect
+
+                wps.append((x,y,mode))
+                count += 1
+        return wps
+
+
     def on_toggle_mission(self):
         if self.running_mission_mode:
             # sending a series of way point to the robot
@@ -238,8 +374,13 @@ class ASV_graphics:
             if self.controller.mode == 'HARDWARE MODE':
                 msg = '!ABORTMISSION'
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, msg.encode())
+                msg = '!CLEARWPS' #also clear waypoints
+                self.controller.local_xbee.send_data_async(self.controller.boat_xbee, msg.encode())
             elif self.controller.mode == "SIM MODE":
                 msg = '!ABORTMISSION'
+                xbee_msg= XBeeModel.message.XBeeMessage(msg.encode(), None, None)
+                self.controller.robot.xbee_callback(xbee_msg)
+                msg = '!CLEARWPS' #also clear waypoints
                 xbee_msg= XBeeModel.message.XBeeMessage(msg.encode(), None, None)
                 self.controller.robot.xbee_callback(xbee_msg)
            
@@ -249,31 +390,30 @@ class ASV_graphics:
             self.running_mission_mode = True
             self.mission.configure(text='Abort Mission')
 
-            self.mission_wps = []
             print(self.wp_list.get(0, END))
-            for p in self.wp_list.get(0, END):
-                lat, lon = list(map(float, p.split(',')))
-                x, y,_, _ = utm.from_latlon(lat, lon)
-                self.mission_wps.append((x,y))
+
+            if self.repeat_mission_mode:
+                num_repeats = int(self.repeat_times.get())
+                self.mission_wps = self.get_mission_wps(num_repeats)
+            else:
+                self.mission_wps = self.get_mission_wps(1)
+
+            print('Waypoints:', self.mission_wps)
 
             if self.controller.mode == 'HARDWARE MODE':
-                for x, y in self.mission_wps:
+                for x, y, mode in self.mission_wps:
                     #Send waypoints one at a time
-                    way_point_msg = "!WP, %f, %f" % (x, y)
+                    way_point_msg = "!WP, %f, %f, %d" % (x, y, mode)
                     print(way_point_msg)
                     self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
-                # print('Waiting for wps to send...')
-                # time.sleep(2)
                 start_mission_msg = "!STARTMISSION"
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, start_mission_msg.encode())
             else:
-                for x, y in self.mission_wps:
+                for x, y, mode in self.mission_wps:
                     #Send waypoints one at a time
-                    way_point_msg = "!WP, %f, %f" % (x, y)
+                    way_point_msg = "!WP, %f, %f, %d" % (x, y, mode)
                     xbee_msg = XBeeModel.message.XBeeMessage(way_point_msg.encode(), None, None)
                     self.controller.robot.xbee_callback(xbee_msg)
-                print('Waiting for wps to send...')
-                time.sleep(2)
                 start_mission_msg = "!STARTMISSION"
                 xbee_msg = XBeeModel.message.XBeeMessage(start_mission_msg.encode(), None, None)
                 self.controller.robot.xbee_callback(xbee_msg)
@@ -286,7 +426,7 @@ class ASV_graphics:
         else:
             self.add_wps_mode = True
             self.mission_add_wps.configure(text='Done Selecting Waypoints')
-        print('Mission planning mode: ', self.add_wps_mode)
+        print('Add wps mode: ', self.add_wps_mode)
 
     def on_toggle_remove_wps(self):
         if self.remove_wps_mode:
@@ -296,6 +436,19 @@ class ASV_graphics:
             self.remove_wps_mode = True
             self.mission_remove_wps.configure(text='Done Removing Waypoints')
         print('Remove wps mode: ', self.remove_wps_mode)
+
+    def on_toggle_repeat_mission(self):
+        if self.repeat_mission_mode:
+            self.repeat_mission_mode = False
+            self.repeat_mission.configure(text='Enable Repeat Mission')
+        else:
+            self.repeat_mission_mode = True
+            self.repeat_mission.configure(text='Disable Repeat Mission')
+        print('Repeat mission mode: ', self.repeat_mission_mode)
+        repeat_text = 'NO'
+        if self.repeat_mission_mode:
+            repeat_text = 'YES'
+        self.repeat_mission_label['text'] = 'Repeat Mission: ' + repeat_text
 
     def on_waypoint_selection(self, event):
         selection = self.wp_list.curselection()
@@ -316,24 +469,41 @@ class ASV_graphics:
             lat, lon = self.pixel_to_laton(x0 + POINT_RADIUS, y0 + POINT_RADIUS)
             print('wp: ', lat, lon)
 
-    def on_clear_wps(self):
-        print('Clearing all waypoints...')
-        command_msg = "!CLEARWPS"
-        if self.controller.mode == 'HARDWARE MODE':
-            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
-        else:
-            xbee_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
-            self.controller.robot.xbee_callback(xbee_msg)
+    def on_wp_click(self, event):
+        items = event.widget.find_closest(event.x, event.y)
+        if items:
+            wp_id = items[0]
+            if self.canvas.itemcget(wp_id, 'fill') == point_track_color:
+                self.canvas.itemconfigure(wp_id, fill=transect_color)
+            else:
+                self.canvas.itemconfigure(wp_id, fill=point_track_color)
 
-        #Clear list and add waypoints
-        if self.wp_list.index('end') != 0:
-            self.wp_list.delete(0, 'end')
-            for marker in self.wp_markers:
-                self.canvas.delete(marker)
-            for label in self.wp_labels:
-                self.canvas.delete(label)
-            self.wp_markers = []
-            self.wp_labels = []
+    def on_clear_wps(self):
+        self.w=popupWindow(self.sidebar_frame)
+        self.clear_wps['state'] = 'disabled'
+        self.sidebar_frame.wait_window(self.w.top)
+        self.clear_wps['state'] = 'normal'
+
+        if self.w.response:
+            print('Clearing all waypoints...')
+            command_msg = "!CLEARWPS"
+            if self.controller.mode == 'HARDWARE MODE':
+                self.controller.local_xbee.send_data_async(self.controller.boat_xbee, command_msg.encode())
+            else:
+                xbee_msg = XBeeModel.message.XBeeMessage(command_msg.encode(), None, None)
+                self.controller.robot.xbee_callback(xbee_msg)
+
+            #Clear list and add waypoints
+            if self.wp_list.index('end') != 0:
+                self.wp_list.delete(0, 'end')
+                for marker in self.wp_markers:
+                    self.canvas.delete(marker)
+                for label in self.wp_labels:
+                    self.canvas.delete(label)
+                self.wp_markers = []
+                self.wp_labels = []
+        else:
+            print('Cancelling clear waypoint request')
 
     def on_load_mission(self):
         mission_file = input('Mission file name? ') #example: sample_mission (file @ Missions/sample_mission.csv)
@@ -440,6 +610,7 @@ class ASV_graphics:
             lat, lon = self.pixel_to_laton(event.x, event.y)
             print ('Adding waypoint: ', lat, lon)
             self.wp_list.insert('end', self.w_name.cget('text') + str(lat) + ',' + str(lon))
+            self.canvas.tag_bind(self.wp_markers[-1], '<ButtonPress-1>', self.on_wp_click)       
 
     # Function to be called for start/stop
     def on_startstop(self):
@@ -464,6 +635,11 @@ class ASV_graphics:
             self.start_stop['text'] = 'Start ASV'
             self.robot_stopped = True
 
+        status_text = 'STARTED'
+        if self.robot_stopped:
+            status_text = 'STOPPED'
+        self.auv_status['text'] = 'AUV Status: ' + status_text
+
     def on_quit(self):
         print('QUIT!')
         command_msg = "!QUIT"
@@ -482,7 +658,6 @@ class ASV_graphics:
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, heading_msg.encode())
 
     def on_set_desired_speed(self, event):
-        print('PRESSED ENTER!')
         speed_msg = '!SETSPEED, %f' % float(self.desired_speed.get())
         print(speed_msg)
         if self.controller.mode == 'HARDWARE MODE':
@@ -493,6 +668,18 @@ class ASV_graphics:
         print(control_msg)
         if self.controller.mode == 'HARDWARE MODE':
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, control_msg.encode())
+
+        #Also send transect params...
+        control_msg = '!TRANSECT, %f, %f, %f, %f, %f, %f' % (float(self.K_v.get()), float(self.K_latAng.get()), float(self.K_vert.get()), float(self.v_rate.get()), float(self.a_rate.get()), float(self.vx_des.get()))
+        print(control_msg)
+        if self.controller.mode == 'HARDWARE MODE':
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, control_msg.encode())
+
+        #Also send speed..
+        speed_msg = '!SETSPEED, %f' % float(self.desired_speed.get())
+        print(speed_msg)
+        if self.controller.mode == 'HARDWARE MODE':
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, speed_msg.encode())
 
     ###########################################################################
     # Updating GUI
@@ -563,7 +750,7 @@ class ASV_graphics:
     def draw_circle(self, x, y, border=False):
         x1, y1 = (x - POINT_RADIUS), (y - POINT_RADIUS)
         x2, y2 = (x + POINT_RADIUS), (y + POINT_RADIUS)
-        color = 'red'
+        color = point_track_color
         outline = 'black'
         if border:
             color = 'orange'
@@ -594,6 +781,7 @@ class ASV_graphics:
         x = origin[0] + (p[0]-origin[0])*np.cos(theta) + (p[1]-origin[1])*np.sin(theta)
         y = origin[1] - (p[0]-origin[0])*np.sin(theta) + (p[1]-origin[1])*np.cos(theta)
         return [x,y]
+
 
 if __name__ == '__main__':
     my_gui = ASV_graphics(None)

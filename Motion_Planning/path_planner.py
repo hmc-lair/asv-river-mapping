@@ -282,7 +282,7 @@ def main():
 	numCycles = 2000
 	startState = [0,0]
 	newMap = copy.deepcopy(infoMap)
-	maxTime = 20*60 #s
+	maxTime = 10*60 #s
 
 	mu = 0
 	sigma = n/5.#For now...
