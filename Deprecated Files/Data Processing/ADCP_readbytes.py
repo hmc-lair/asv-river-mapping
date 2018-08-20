@@ -1,15 +1,35 @@
 import struct
+import matplotlib.pyplot as plt
 
 def main():
-    data = read_ADCP_file('Log/ADCP_18-07-02 17.27.07.bin') # river
-    # data = read_ADCP_file('Log/ADCP_18-07-02 17.33.22.bin')
+    # Read all of the ensmbles from the Binary file
+    data = read_ADCP_file('ADCP_18-07-02 17.27.07.bin')
     cur_offset = 0
     ensemble_num = 1
+
+    # Example plotting
+    depth = []
+
+    # Iterate through each ensemble
     while cur_offset < len(data):
+        # Data stored in each return_val: 
+            #     return_val = [return_offset, roll, pitch, heading, depth_cell_length, 
+            # relative_velocities, bt_velocities, bt_ranges, time_stamp]
         return_val = read_ensemble(data, cur_offset)
         cur_offset = return_val[0]
         print('Ensemble ', ensemble_num)
         ensemble_num += 1
+
+        # Example plotting
+        depth.append(return_val[-2])
+
+    # Average depth across beams
+    average = [sum(d)/4 for d in depth]
+    plt.plot(average, '-o')
+    plt.xlabel('Ensemble count')
+    plt.ylabel('Depths (meters)')
+    plt.title('Example Depth Plot')
+    plt.show()
 
 def read_ADCP_file(filename):
     # READ FILE
@@ -18,7 +38,6 @@ def read_ADCP_file(filename):
         for line in f.readlines():
             data = line
             all_data += data 
-    # print(all_data[:1000])
     return all_data
 
 def read_ensemble(data, cur_offset):
@@ -42,6 +61,8 @@ def read_ensemble(data, cur_offset):
         offset = all_data[6+2*i:8+2*i]
         offset_int = int.from_bytes(offset, byteorder='little')
         offsets.append(offset_int)
+
+    # Uncomment this to see data types and offsets
     # print('Offsets: ', offsets)
     # print('Data IDs: ', [all_data[x:x+2] for x in offsets])
     # print('Data types:', num_types)
@@ -54,7 +75,9 @@ def read_ensemble(data, cur_offset):
     pings_per_ensemble = int.from_bytes(all_data[fixed_offset+10: fixed_offset+12], byteorder='little')
     depth_cell_length = int.from_bytes(all_data[fixed_offset+12: fixed_offset+14], byteorder='little') # cm
     coord_transform = all_data[fixed_offset+25]
-    print('Coord Transform: ', coord_transform)
+
+    # Uncomment this to see Coordinate transform options and depth cell length
+    # print('Coord Transform: ', coord_transform)
     # print('Depth cell length', depth_cell_length)
 
     # VARIABLE LEADER
@@ -72,7 +95,7 @@ def read_ensemble(data, cur_offset):
     relative_velocities = []
 
     for i in range(num_cells):
-        start_offset = velocity_profile_offset + 2 + 2*i
+        start_offset = velocity_profile_offset + 2 + 8*i
         # Average over beams
         vel = []
         for j in range(num_beams):
@@ -81,6 +104,8 @@ def read_ensemble(data, cur_offset):
             vel.append(curVel)
         #vel = vel/float(num_beams)
         relative_velocities.append(vel)
+
+    # Uncomment this to see relative water velocities
     # print(relative_velocities)
     # print('Num cells: ', num_cells)
     # print('Velocity profile: ', relative_velocities)
@@ -108,6 +133,7 @@ def read_ensemble(data, cur_offset):
         bt_velocities.append(int.from_bytes(all_data[bt_offset+24+i*2:bt_offset+26+i*2], byteorder = 'little',signed=True))
         beam_percent_good.append(all_data[bt_offset+40+i])
 
+    # Uncomment this to see Bottom track datas
     # print('BT values: ', bt_ranges, bt_velocities, beam_percent_good)
     # print('bt beam 1 corr magnitude', bt_correlation_mag)
     # print('bt pings/ensemble ', bt_pings_per_ensemble)
@@ -137,16 +163,11 @@ def read_ensemble(data, cur_offset):
         time_stamp = GPS_msg[0].decode().split(',')[1]
 
         delta_times_double = [struct.unpack('d', b)[0] for b in delta_times_bytes] # convert to double
-        # print('GPS_msg: ', GPS_msg)
-        # print('Delta ts: ', delta_times_double )
-    # return_data = [current_offset + num_bytes + 2, roll, pitch, yaw, depth_cell_length, 
-    #     relative_velocities]
-    # print("delta time," ,msg_types)
-    # print('GPS:', GPS_msg)
-    # print('Vertical beam range:', vb_range)
+
+    # Move on to the next ensmble by returning the index offset
     return_offset = cur_offset + num_bytes + 2
     return_data = [return_offset, roll, pitch, heading, depth_cell_length, 
-        relative_velocities, bt_velocities, time_stamp]
+        relative_velocities, bt_velocities, bt_ranges, time_stamp]
 
     return return_data
 

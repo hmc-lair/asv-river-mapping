@@ -11,13 +11,12 @@ import math
 # IMAGE_HEIGHT = 250.
 # MAP_FILE = '../Maps/cast.tif'
 
+
+
 # IMAGE_WIDTH = 200
 # IMAGE_HEIGHT = 150
 # MAP_FILE = '../Maps/millikan.tif'
 
-# IMAGE_WIDTH = 600
-# IMAGE_HEIGHT = 400
-# MAP_FILE = '../Maps/river_7.27.tif'
 
 # IMAGE_WIDTH = 1000
 # IMAGE_HEIGHT = 700
@@ -249,6 +248,7 @@ class ASV_graphics:
         # self.set_desired_speed.pack()
         self.desired_speed_label = Label(self.speed_frame, anchor='w', text='Desired Speed (m/s)').pack(side='left')
         self.desired_speed = Entry(self.speed_frame, width=10)
+
         self.desired_speed.insert(END, '3')
         self.desired_speed.bind('<Return>', self.on_set_desired_speed)
         self.desired_speed.pack(side='right')
@@ -259,6 +259,7 @@ class ASV_graphics:
 
         self.Kp_frame = Frame(self.control_config_frame)
         self.Kp_frame.pack()
+
         self.Kp_ang_label = Label(self.Kp_frame, anchor='w', text='K_ang').pack(side='left')
         self.Kp_ang = Entry(self.Kp_frame, width=5)
         self.Kp_ang.insert(END, '800')
