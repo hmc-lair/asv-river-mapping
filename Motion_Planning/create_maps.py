@@ -86,7 +86,7 @@ def setupInfoMap(filename):
 	E = np.loadtxt(open(filename, 'r'), delimiter=',', skiprows=1)
 
 
-	E = np.concatenate((E, E), axis=1)
+	#E = np.concatenate((E, E), axis=1)
 	print('Dim of map', E.shape)
 
 	m,n = E.shape

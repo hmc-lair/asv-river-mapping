@@ -23,12 +23,16 @@ import math
 # IMAGE_HEIGHT = 700
 # MAP_FILE = '../Maps/lake_7-27.tif'
 
-IMAGE_WIDTH = 300
-IMAGE_HEIGHT = 200
-MAP_FILE = '../Maps/river_8-13.tif'
+# IMAGE_WIDTH = 300
+# IMAGE_HEIGHT = 200
+# MAP_FILE = '../Maps/river_8-13.tif'
 
-MAP_WIDTH = 700#800
-MAP_HEIGHT = 500#600
+IMAGE_WIDTH = 200
+IMAGE_HEIGHT = 100
+MAP_FILE = '../Maps/output.tif' #perhaps for last deployment
+
+MAP_WIDTH = 600#800
+MAP_HEIGHT = 400#600
 
 POINT_RADIUS = 3
 
@@ -137,13 +141,6 @@ class ASV_graphics:
         self.repeat_mission_label = Label(self.sidebar_frame, anchor='w', text='Repeat Mission: NO', fg="red")
         self.repeat_mission_label.pack()
 
-        self.start_frame = Frame(self.sidebar_frame)
-        self.start_frame.pack()
-        self.start_stop = Button(self.start_frame, anchor='w', text='Start ASV', command=self.on_startstop)
-        self.start_stop.pack(side='left')
-        self.mission = Button(self.start_frame, anchor='w', text='Start Mission', command=self.on_toggle_mission)
-        self.mission.pack(side='right')
-
         self.repeat_frame = Frame(self.sidebar_frame)
         self.repeat_frame.pack()
         self.repeat_label = Label(self.repeat_frame, anchor='w', text='# Repeats').pack(side='left')
@@ -152,6 +149,13 @@ class ASV_graphics:
         self.repeat_times.pack(side='right')
         self.repeat_mission = Button(self.sidebar_frame, anchor='w', text='Enable Repeat Mission', command=self.on_toggle_repeat_mission)
         self.repeat_mission.pack()
+
+        self.start_frame = Frame(self.sidebar_frame)
+        self.start_frame.pack()
+        self.start_stop = Button(self.start_frame, anchor='w', text='Start ASV', command=self.on_startstop)
+        self.start_stop.pack(side='left')
+        self.mission = Button(self.start_frame, anchor='w', text='Start Mission', command=self.on_toggle_mission)
+        self.mission.pack(side='right')
 
 
         # 2) Mission planning
