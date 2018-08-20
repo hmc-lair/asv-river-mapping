@@ -146,11 +146,8 @@ class ASV_graphics:
         # self.set_desired_speed.pack()
         self.desired_speed_label = Label(self.speed_frame, anchor='w', text='Desired Speed (m/s)').pack(side='left')
         self.desired_speed = Entry(self.speed_frame, width=10)
-<<<<<<< HEAD
-        self.desired_speed.insert(END, '1')
-=======
+
         self.desired_speed.insert(END, '3')
->>>>>>> c0a0c6df119a0cd58be6e8b47d9ff97066b93a1e
         self.desired_speed.bind('<Return>', self.on_set_desired_speed)
         self.desired_speed.pack(side='right')
 
@@ -164,11 +161,8 @@ class ASV_graphics:
         self.Kp_ang_frame.pack(side='left')
         self.Kp_ang_label = Label(self.Kp_ang_frame, anchor='w', text='K_ang').pack(side='left')
         self.Kp_ang = Entry(self.Kp_ang_frame, width=5)
-<<<<<<< HEAD
-        self.Kp_ang.insert(END, '300')
-=======
+
         self.Kp_ang.insert(END, '800')
->>>>>>> c0a0c6df119a0cd58be6e8b47d9ff97066b93a1e
         self.Kp_ang.pack(side='right')
         self.Kp_nom_frame = Frame(self.Kp_frame)
         self.Kp_nom_frame.pack(side='right')

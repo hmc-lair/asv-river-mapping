@@ -12,11 +12,11 @@ class ASV_state:
 		self.a = 0.0
 
 		# Course velocity and course angle as presented by GPVTG message
-		self.v_course = 0 
+		self.v_course = 0
 		self.ang_course = 0
 
-		self.current_v = 0
-		self.current_ang = math.pi/2
+		self.current_v = 1.5
+		self.current_ang = -math.pi/2 #-160/180 * math.pi
 
 		self.roll = 0.0
 		self.pitch = 0.0
@@ -27,6 +27,9 @@ class ASV_state:
 
 		self.lat = 0.0
 		self.lon = 0.0
+
+		# Controller
+		self.control_type = 1
 
 	def __str__(self):
 		return str([self.x, self.y, self.theta])

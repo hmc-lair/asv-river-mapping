@@ -18,7 +18,7 @@ class ASV_robot:
 
         # angle offset
         self.adcp_angle_offset = 45 # degrees
-        self.speed_des = 1
+        self.speed_des = 3
 
         # Way points to navigate
         self.cur_des_point = ASV_state()
@@ -31,18 +31,41 @@ class ASV_robot:
         self.dt = 0.01
         self.motor_stop = True
         self.first_GPS = True
+        self.first_point = True # first fence point
 
         # Controller Params
-        self.Kp_ang = 1000
-        self.Kp_nom = 500
-        self.Kd = 0
-        self.Ki = 10
-        self.last_uL = 0.0
-        self.last_uR = 0.0
-        self.last_ang_error = 0.0
+        # Heading Control Param
+        self.Kp_ang = 500 # also used for normal point tracker
+        self.Kp_nom = 1000 # speed control for normal point tracker
+        self.Kd = 0       # not used for now
+        
+        # LOS Integral Control Param
+        self.Ki = 20     # integral gain for offset angle
+        self.last_offtrack_error =0 # Memories for LOS integral control
+        self.last_ang_error = 0.0 # Memories for derivative and integral control
         self.last_ang_error2 = 0.0
         self.last_u_rudder = 0.0
-        self.last_offtrack_error =0
+
+        # Course keep controller param
+        # Controller 2
+        self.K_v = 0.5 # relate distance to vertical velocity
+        self.K_vert = 600 # relate velocity to thrust value
+        self.K_latAng = 0.1 # relate lateral velocity to distance
+        self.angle_update_rate = 5 # decide how often to control the angles
+        self.velocity_update_rate = 5 # decide how often to control the velocity
+        self.v_x_des = 0.5
+
+        self.ang_update_count = 0 # Memories to control angle and velocity update rate
+        self.vert_update_count = 0
+        self.last_v_des=  0
+        self.last_ang_des = 0
+        self.last_drift_error = 0
+        self.v_x = 0 # current velocity toward the point
+
+        # Controller 1
+        self.nom_thrust = 500
+        self.K_va = 0.05 # relate desired velocity to angle
+        self.K_latV = 300 # for changing the thrust on lateral control
 
         self.current_angle = 0.0
 
@@ -50,8 +73,8 @@ class ASV_robot:
         self.rudder = 0.0
         self.R_motor = 0.0
         self.L_motor = 0.0
-        self.back_spin_threshold = 250
-        self.forward_threshold = 250
+        self.back_spin_threshold = 1000
+        self.forward_threshold = 1000
 
         self.port = 0
         self.strboard = 0
@@ -65,7 +88,6 @@ class ASV_robot:
         self.GPS_received = False
         self.GPS_speed = 0
         self.GPS_course = 0 # course over ground in degrees '0 - 359'
-
         self.beam_angle = 20
 
         # magnetometer data
@@ -112,6 +134,7 @@ class ASV_robot:
 
         self.mission_debug = True
         self.control_debug = False
+
         # data to log: GPS, ADCP, heading
 
     def main_loop(self):
@@ -267,6 +290,249 @@ class ASV_robot:
     def clear_way_points(self):
         self.way_points = []
 
+    ######################## Controllers ###############################
+    def main_controller(self, des_point, v_x_des):
+        '''Main controller that switch between transect control2 and 
+        the normal point tracker''' 
+        uR = 0
+        uL = 0
+        rudder = 0
+        if des_point.control_type == 1:
+            # Use the regular point tracker
+            uR, uL, rudder = self.point_track(self.cur_des_point)
+            return uL, uR, rudder
+        elif des_point.control_type == 2:
+            # Use the transect control2
+            uR, uL, rudder = self.transect_control2(self.cur_des_point, self.v_x_des)
+            return uL, uR, rudder
+
+    ########## Controller 1 - Fixed Thrust Transect Control ############
+    def transect_control1(self, des_point, v_x_des):
+        '''Controller 1: Given a thrust
+        1. Calculate displacement relative to line
+        2. Calculate correction y velocity
+        3. Calculate correction ASV angle relative to line
+        Parallel: Use v_x difference to calculate thrust
+        Move to first point with regular point tracker'''
+
+        # Parameters: u_nom (nomianl speed)
+        # Kp_ang (turning gain)
+        # K_lat (thruster gain for lateral speed)
+        # K_va (ASV angle calculation gain for vertical compensation)
+        # K_v (Velocity adjustment from position)
+        u_nom = self.nom_thrust
+        if self.first_point == True:
+            # Do regular point track to the first point
+            u_starboard, u_port, u_rudder = self.point_track(des_point)
+        else:
+            distance = math.sqrt((des_point.y - self.state_est.y)**2 + (des_point.x - self.state_est.x)**2)
+            if distance <= self.dist_threshold or self.des_reached:
+                self.stop_motor = True
+                self.des_reached = True
+                self.last_des_point.x = self.cur_des_point.x
+                self.last_des_point.y = self.cur_des_point.y
+                self.first_point = False
+
+                u_starboard = 0.0
+                u_port = 0.0
+                u_rudder = 1600
+            else:
+                # Calculate correction Velocity base on displacement
+                v_vert = self.vertical_speed_control(des_point)
+                if self.ang_update_count >= self.angle_update_rate:
+                    ang_des = self.calc_vertical_ang(des_point, v_vert)
+                    self.last_ang_des = ang_des
+                    self.ang_update_count = 0
+                else:
+                    ang_des = self.last_ang_des
+                    self.ang_update_count += 1
+
+                u_rudder = self.heading_control(ang_des)
+                u_correct = self.lateral_speed_control(des_point, v_x_des)
+                u_starboard = u_nom + u_correct
+                u_port = u_nom + u_correct
+
+                u_starboard = -min(max(u_starboard, -self.back_spin_threshold), self.forward_threshold)
+                u_port = -min(max(u_port, -self.back_spin_threshold), self.forward_threshold) 
+
+        return u_port, u_starboard, u_rudder
+
+    def heading_control(self, heading):
+        '''Orient the robot heading by turning the rudder'''
+        u_rudder = -self.angleDiff(heading - self.state_est.theta) * self.Kp_ang
+        u_rudder = int(u_rudder + 1515)
+        if (u_rudder > 1834):
+            u_rudder = 1834
+        elif (u_rudder < 1195):
+            u_rudder = 1195
+
+        return u_rudder
+
+    def lateral_speed_control(self, des_point, v_x_des):
+        '''Adjust the ASV thrust according to the transect (x) speed'''
+        # Calculate drift away from the line
+        K_lat = self.K_latV
+
+        cur_point = self.last_des_point
+        next_point = des_point
+
+        line_angle = math.atan2((next_point.y - cur_point.y),(next_point.x - cur_point.x))                
+        v_ang_from_line = self.angleDiff(self.state_est.ang_course - line_angle)
+        v_x = self.state_est.v_course * math.cos(v_ang_from_line)
+
+        heading_from_line = self.angleDiff(self.state_est.theta - line_angle)
+
+        u_nom = (v_x_des - v_x) * K_lat #* math.cos(heading_from_line)
+        # if math.cos(heading_from_line) < 0.5:
+        #     u_nom = 0
+
+        print("V_x", v_x)
+        print("U_nom", u_nom)
+        return u_nom
+
+    def calc_vertical_ang(self, des_point, v_y_des):
+        '''Adjust the ASV angle relative to the line according to vertical (y) speed'''
+        # Calculate drift away from the line
+        K_va = self.K_va
+        cur_point = self.last_des_point
+        next_point = des_point
+
+        # Calculate line angle, velocity angle, and velocity away from line
+        line_angle = math.atan2((next_point.y - cur_point.y),(next_point.x - cur_point.x))                
+        v_ang_from_line = self.angleDiff(self.state_est.ang_course - line_angle)
+        v_y = self.state_est.v_course * math.sin(v_ang_from_line)
+
+        # Robot heading relative to line
+        heading_from_line = self.angleDiff(self.state_est.theta - line_angle)
+
+        # Adjust robot heading relative to line
+            # Bigger v_y -> robot orientated more normal to the line
+            # Smaller v_y -> robot orientated more toward the endpoints
+        des_line_heading = self.angleDiff(-(v_y - v_y_des) * K_va + heading_from_line)            
+        if abs(des_line_heading) > math.pi/2:
+            des_line_heading = des_line_heading/abs(des_line_heading) * math.pi/2   
+
+        new_ang = self.angleDiff(des_line_heading + line_angle)
+        return new_ang
+
+    def vertical_speed_control(self, des_point):
+        '''calculate current velocity toward the waypoint, increase or decrease u_nom'''
+        # Calculate drift away from the line
+        K_v = self.K_v
+        cur_point = self.last_des_point
+        next_point = des_point
+
+        line_angle = math.atan2((next_point.y - cur_point.y),(next_point.x - cur_point.x))                
+        position_angle = math.atan2((self.state_est.y - cur_point.y), (self.state_est.x - cur_point.x))
+
+        pos_ang_from_line = self.angleDiff(position_angle - line_angle)
+        dist = math.sqrt((self.state_est.y - cur_point.y)**2 + (self.state_est.x - cur_point.x)**2 )
+        drift_distance = dist * math.sin(pos_ang_from_line)
+
+        v_correct = -drift_distance * K_v
+        return v_correct
+
+
+    #######################################################################
+    ############## Controller 2: Fixed Angle Variable Thrust ##############
+    #######################################################################
+
+    def transect_control2(self, des_point, v_x_des):
+        if self.first_point == True:
+            # Do regular point track to the first point
+            u_starboard, u_port, u_rudder = self.point_track(des_point)
+        else:
+            distance = math.sqrt((des_point.y - self.state_est.y)**2 + (des_point.x - self.state_est.x)**2)
+            if distance <= self.dist_threshold or self.des_reached:
+                self.stop_motor = True
+                self.des_reached = True
+                self.last_des_point.x = self.cur_des_point.x
+                self.last_des_point.y = self.cur_des_point.y
+                self.first_point = False
+
+                u_starboard = 0.0
+                u_port = 0.0
+                u_rudder = 1600
+            else:
+                # Calculate correction Velocity base on displacement
+                u_rudder = 1515
+                if self.vert_update_count >= self.velocity_update_rate:
+                    u_vert = self.vertical_speed_control(des_point)
+                    self.last_v_des = u_vert
+                    self.vert_update_count = 0
+                else:
+                    self.vert_update_count += 1
+                    u_vert = self.last_v_des
+
+                if self.ang_update_count >= self.angle_update_rate:
+                    ang_des = self.calc_lateral_ang(des_point, v_x_des)
+                    self.last_ang_des = ang_des
+                    self.ang_update_count = 0
+                else:
+                    self.ang_update_count += 1
+                    ang_des = self.last_ang_des
+
+                u_rudder = self.heading_control(ang_des)
+                u_port, u_starboard = self.vertical_position_hold(self.cur_des_point, -u_vert)
+        
+        return u_port, u_starboard, u_rudder
+
+    def calc_lateral_ang(self, des_point, v_x_des):
+        '''Adjust the ASV angle according to the desired transect (x) speed'''
+
+        # Calculate drift away from the line
+        cur_point = self.last_des_point
+        next_point = des_point
+
+        line_angle = math.atan2((next_point.y - cur_point.y),(next_point.x - cur_point.x))                
+        v_ang_from_line = self.angleDiff(self.state_est.ang_course - line_angle)
+        v_x = self.state_est.v_course * math.cos(v_ang_from_line)
+
+        self.v_x = v_x
+
+        # Calculate heading difference between robot and the line
+        heading_from_line = self.angleDiff(self.state_est.theta - line_angle)
+
+        if heading_from_line < 0:
+            des_line_heading = self.angleDiff(-(v_x - v_x_des) * self.K_latAng + heading_from_line)
+        else:
+            des_line_heading = self.angleDiff((v_x - v_x_des) * self.K_latAng + heading_from_line)
+        
+        new_ang = self.angleDiff(des_line_heading + line_angle)
+        return new_ang
+
+    def vertical_position_hold(self, des_point, vertical_speed):
+        ''' hold position '''
+        # Got to the first point. Now we hold position on the fence line
+
+        # Calculate drift away from the line
+        cur_point = self.last_des_point
+        next_point = des_point
+        u_nom = self.K_vert
+
+        # 1. Angle of the line
+        # 2. Angle between the robot pos and line
+        # 3. Angle between the robot_v and line
+        line_angle = math.atan2((next_point.y - cur_point.y),(next_point.x - cur_point.x))                
+        v_ang_from_line = self.angleDiff(self.state_est.ang_course - line_angle)
+        drift_v = self.state_est.v_course * math.sin(v_ang_from_line)
+        heading_from_line = self.angleDiff(self.state_est.theta - line_angle)
+        
+        position_angle = math.atan2((self.state_est.y - cur_point.y), (self.state_est.x - cur_point.x))
+        pos_ang_from_line = self.angleDiff(position_angle - line_angle)
+        # dist = math.sqrt((self.state_est.y - cur_point.y)**2 + (self.state_est.x - cur_point.x)**2 )
+        # drift_distance = dist * math.sin(pos_ang_from_line)
+        # print("drift d", drift_distance)
+        thrust_dir = heading_from_line/abs(heading_from_line)
+        
+        u_nom = (drift_v+ vertical_speed) * -thrust_dir * u_nom 
+
+        u_starboard = -min(max(u_nom, -self.back_spin_threshold), self.forward_threshold)
+        u_port = -min(max(u_nom, -self.back_spin_threshold), self.forward_threshold)
+        
+        return u_port, u_starboard
+
+
     def integral_LOS_pt(self, des_point):
         '''Using integral line of sight tracking'''
         track_angle = math.atan2(des_point.y - self.last_des_point.y,
@@ -300,7 +566,6 @@ class ASV_robot:
         robot_vx = self.state_est.v_course * math.cos(self.state_est.ang_course)
         robot_vy = self.state_est.v_course * math.sin(self.state_est.ang_course)
         robot_v = np.array([robot_vx, robot_vy])
-
         desired_dir = np.array([math.cos(angle_off), math.sin(angle_off)])
 
         # direction_off = math.acos(np.dot(robot_v, desired_dir) / (self.state_est.v_course * 1))
@@ -324,7 +589,8 @@ class ASV_robot:
         if distance <= self.dist_threshold or self.des_reached:
             self.stop_motor = True
             self.des_reached = True
-            self.last_des_point = self.cur_des_point
+            self.last_des_point.y = self.cur_des_point.y
+            self.last_des_point.x = self.cur_des_point.x
             # self.last_offtrack_error = 0
             u_starboard = 0.0
             u_port = 0.0
@@ -340,7 +606,8 @@ class ASV_robot:
             self.last_ang_error = angle_error
             self.last_ang_error2 = self.last_ang_error
             self.last_u_rudder = u_rudder
-            u_nom = (self.speed_des - speed_to_dest) * self.Kp_nom + 100
+            u_nom = (self.speed_des - self.state_est.v_course) * self.Kp_nom + 100
+
 
             u_port = u_nom
             u_starboard = u_nom
@@ -368,33 +635,33 @@ class ASV_robot:
         v_x_des = speed_des * math.cos(des_angle)
         v_y_des = speed_des * math.sin(des_angle)
 
-        # Find robot velocity 
-        robot_vx = self.state_est.v_course * math.cos(self.state_est.ang_course)
-        robot_vy = self.state_est.v_course * math.sin(self.state_est.ang_course)
-        robot_v = np.array([robot_vx, robot_vy])
-       
-        # Find angle difference between desired angle and current trajectory angle
-        robot_v_ang = math.atan2(robot_vy, robot_vx)
-        course_speed = math.sqrt(np.dot(robot_v,robot_v))
-
         distance = math.sqrt((des_point.y - self.state_est.y)**2 + 
                 (des_point.x - self.state_est.x)**2)
 
         if distance <= self.dist_threshold or self.des_reached:
             self.stop_motor = True
             self.des_reached = True
+            self.first_point = False
+            self.last_des_point.x = self.cur_des_point.x
+            self.last_des_point.y = self.cur_des_point.y
             u_starboard = 0.0
             u_port = 0.0
             u_rudder = 1515
         else:
             # Simple heading PD control
-            angle_error = -self.angleDiff(des_angle - robot_v_ang)
-            u_rudder = self.last_u_rudder + (angle_error * (self.Kp_ang + self.Kd / self.dt) + self.last_ang_error * (-self.Kp_ang - 2*self.Kd/self.dt) + self.last_ang_error2 * self.Kd/self.dt)
+            angle_error = -self.angleDiff(des_angle - self.state_est.theta)
+            v_angle_to_point = self.angleDiff(self.state_est.ang_course - des_angle)
+            v_x = self.state_est.v_course * math.cos(v_angle_to_point)
+           
+            self.v_x = v_x
 
+            # u_rudder = self.last_u_rudder + (angle_error * (self.Kp_ang + self.Kd / self.dt) + self.last_ang_error * (-self.Kp_ang - 2*self.Kd/self.dt) + self.last_ang_error2 * self.Kd/self.dt)
+            u_rudder = angle_error * self.Kp_ang
             self.last_ang_error = angle_error
             self.last_ang_error2 = self.last_ang_error
             self.last_u_rudder = u_rudder
-            u_nom = (speed_des - course_speed) * self.Kp_nom + 100
+
+            u_nom = (speed_des - v_x) * self.Kp_nom + 100
 
             u_port = u_nom
             u_starboard = u_nom
@@ -409,136 +676,6 @@ class ASV_robot:
             u_port = -min(max(u_nom, -self.back_spin_threshold), self.forward_threshold)
 
         return u_port, u_starboard, u_rudder
-
-    def diff_point_track(self, des_point):
-        '''Generate motor values given a point and current state'''
-        speed_des = self.speed_des
-        angle_offset = math.atan2(des_point.y - self.state_est.y,
-                                des_point.x - self.state_est.x)
-        distance = math.sqrt((des_point.y - self.state_est.y)**2 + 
-                (des_point.x - self.state_est.x)**2)
-
-        # Find robot velocity (make this into asv state later)
-        robot_vx = self.state_est.v_course * math.cos(self.state_est.ang_course)
-        robot_vy = self.state_est.v_course * math.sin(self.state_est.ang_course)
-        robot_v = np.array([robot_vx, robot_vy])
-        course_speed = math.sqrt(np.dot(robot_v,robot_v))
-
-        if distance <= self.dist_threshold or self.des_reached:
-            # if self.des_reached == False: # Just print the first time destination reached
-            # print('Destination reached! Turning off motors.')
-            self.stop_motor = True
-            self.des_reached = True
-            u_starboard = 0.0
-            u_port = 0.0
-        else:
-            # Simple heading PD control
-            ang_error = self.angleDiff(angle_offset- self.state_est.theta)
-            # print(ang_error)
-            # print('ang_error', ang_error)
-            # print(des_point.x, des_point.y)
-            
-            # PID control
-            # uL = -(self.last_uL + ang_error *(self.Ki * self.dt + self.Kp + self.Kd/self.dt) + self.last_ang_error*(-self.Kp - 2 * self.Kd/self.dt) + self.last_ang_error2 * self.Kd/self.dt)
-            # uR = self.last_uR + ang_error *(self.Ki * self.dt + self.Kp + self.Kd/self.dt) + self.last_ang_error*(-self.Kp - 2 * self.Kd/self.dt) + self.last_ang_error2 * self.Kd/self.dt
-           
-            # P control (working for pool!)
-            # uL = -self.Kp * ang_error
-            # uR = self.Kp * ang_error
-
-            ### PI control (working for pool!)
-            uL = self.last_uL - (ang_error * (self.Kp_ang + self.Ki * self.dt) - self.last_ang_error * self.Kp_ang)
-            uR = self.last_uR + (ang_error * (self.Kp_ang + self.Ki * self.dt) - self.last_ang_error * self.Kp_ang)
-            self.last_ang_error = ang_error
-            self.last_ang_error2 = self.last_ang_error
-            self.last_uL = uL
-            self.last_uR = uR
-            # u_nom = 150
-            # uR = uR * 100
-            # uL = uL * 100
-            
-            u_nom = (speed_des - course_speed) * self.Kp_nom + 100
-            # print("u_nom: ", u_nom)
-            # print("current speed: ", self.state_est.v_course)
-            uL = uL * 50
-            uR = uR * 50
-            # percent_reached = (math.pi - abs(ang_error))/math.pi
-            # if percent_reached <= 0.7:
-            #     u_nom = 0
-            # else:
-             #percent_reached * 150
-            # if (abs(ang_error) >= 0.2):
-            #     u_nom = 0
-            
-            # uR = uR * 100
-            # uL = uL * 100
-            # print("angle error %f" % ang_error)
-            # print("u_nom %f" % u_nom)
-            # print("ur %f, ul %f" % (uR, uL))
-            # cap the distance
-            u_starboard = -min(max(u_nom + uR, -self.back_spin_threshold), self.forward_threshold)
-            u_port = -min(max(u_nom + uL, -self.back_spin_threshold), self.forward_threshold)
-
-        return u_port, u_starboard
-
-    def diff_point_track2(self, des_point):
-        ''' Point tracker that uses ASV's course velocity instead of heading'''
-        speed_des = self.speed_des
-
-        # Find robot velocity (make this into asv state later)
-        robot_vx = self.state_est.v_course * math.cos(self.state_est.ang_course)
-        robot_vy = self.state_est.v_course * math.sin(self.state_est.ang_course)
-        
-        # calculate desired angle displacement
-        des_angle = math.atan2(des_point.y - self.state_est.y,
-                                des_point.x - self.state_est.x)
-        
-        robot_v = np.array([robot_vx, robot_vy])
-
-        # Find angle difference between desired trajectory and current trajectory
-        v_x_des = speed_des * math.cos(des_angle)
-        v_y_des = speed_des * math.sin(des_angle)
-       
-        robot_v_ang = math.atan2(robot_vy, robot_vx)
-        angle_off = self.angleDiff(des_angle - robot_v_ang)
-
-        course_speed = math.sqrt(np.dot(robot_v,robot_v))
-
-        distance = math.sqrt((des_point.y - self.state_est.y)**2 + 
-                (des_point.x - self.state_est.x)**2)
-
-        if distance <= self.dist_threshold or self.des_reached:
-            # if self.des_reached == False: # Just print the first time destination reached
-            # print('Destination reached! Turning off motors.')
-            self.stop_motor = True
-            self.des_reached = True
-            u_starboard = 0.0
-            u_port = 0.0
-        else:
-            # Simple heading PD control
-            ang_error = self.angleDiff(des_angle- self.state_est.theta)
-            ang_error = angle_off
-            # print(des_point.x, des_point.y)
-            
-            uL = self.last_uL - (ang_error * (self.Kp_ang + self.Ki * self.dt) - self.last_ang_error * self.Kp_ang)
-            uR = self.last_uR + (ang_error * (self.Kp_ang + self.Ki * self.dt) - self.last_ang_error * self.Kp_ang)
-            
-
-            self.last_ang_error = ang_error
-            self.last_ang_error2 = self.last_ang_error
-            self.last_uL = uL
-            self.last_uR = uR
-            u_nom = (speed_des - course_speed) * self.Kp_nom + 100
-            # print("u_nom: ", u_nom)
-            # print("current speed: ", self.state_est.v_course)
-            uL = uL * 50
-            uR = uR * 50            
-
-            u_starboard = -min(max(u_nom + uR, -self.back_spin_threshold), self.forward_threshold)
-            u_port = -min(max(u_nom + uL, -self.back_spin_threshold), self.forward_threshold)
-
-
-        return u_port, u_starboard
 
     def log_data(self):
         '''Log relevant data'''
@@ -602,6 +739,7 @@ class ASV_robot:
             wp = ASV_state()
             wp.x = float(parsed_data[1]) # way point in local x, y
             wp.y = float(parsed_data[2]) 
+            # wp.control_type = int(parsed_data[3])
             self.add_way_point(wp)
             self.des_reached = False
         elif parsed_data[0] == "!STARTMISSION":
@@ -609,6 +747,7 @@ class ASV_robot:
             self.last_des_point.x = self.state_est.x
             self.last_des_point.y = self.state_est.y
             self.des_reached = False
+            self.first_point = True
         elif parsed_data[0] == "!ABORTMISSION":
             self.way_points = []
             self.motor_stop  = True
@@ -617,6 +756,7 @@ class ASV_robot:
             print('Stop message received. Motors stopped.')
         elif parsed_data[0] == "!START":
             self.motor_stop = False
+            self.first_point = True
             print('Start message received. Motors re-started.')
         elif parsed_data[0] == "!HEADINGOFFSET":
             self.heading_offset = float(parsed_data[1])
@@ -628,6 +768,13 @@ class ASV_robot:
             self.Kp_nom = float(parsed_data[2])
             self.forward_threshold = float(parsed_data[3])
             self.back_spin_threshold = float(parsed_data[4])
+        elif parsed_data[0] == "!TRANSECT":
+            self.K_v = float(parsed_data[1])
+            self.K_latAng = float(parsed_data[2])
+            self.velocity_update_rate = int(parsed_data[3])
+            self.angle_update_rate = int(parsed_data[4])
+            self.v_x_des = float(parsed_data[5])
+            print('Transect Gains Received.')
         else:
             print('Unknown command!')
 
@@ -962,82 +1109,6 @@ class ASV_robot:
             essential = essential + surface_vel
             return essential
 
-    def convert_bt_velocities(self, roll, pitch, heading, bt_vels):
-        bt_earth_vel = []
-
-        roll_r = roll / 180 * math.pi
-        pitch_r = pitch / 180 * math.pi
-        heading_r = heading / 180 * math.pi
-
-        v_x_R, v_y_R, v_z_R, v_error = beam2Instrument(self.beam_angle, bt_vels[i])
-        v_x, v_y, v_z = instrument2Earth(roll_r, pitch_r, heading_r, v_x_R, v_y_R, v_z_R)
-
-        return v_x, v_y
-
-    def beam2Instrument(self, beam_angle, beams):
-        ''' Convert beam coordinate to instrument coordinate
-        see the teledyne beam transformation guide for definition'''
-        c = 1 # convex transducer head
-        a = 1/(2*math.sin(beam_angle))
-        b = 1/(4*math.cos(beam_angle))
-        d = a/math.sqrt(2)
-        THREE_BEAM = False
-        BAD_BEAM = False
-        bad_count = 0
-        for i in range(len(beams)):
-            if abs(beams[i]) >= 32700:
-                bad_count += 1
-
-        if bad_count == 1:
-            THREE_BEAM = True
-        elif bad_count >= 2:
-            BAD_BEAM = True
-
-        
-        if THREE_BEAM:
-            vel_x = c * a * (beams[0] - beams[1])
-            vel_y = c * a * (beams[0] + beams[1] - 2 * beams[2])
-            vel_z = 2 * b * (beams[0] + beams[1])
-            vel_error = 0
-        elif BAD_BEAM:
-            vel_x = 0
-            vel_y = 0
-            vel_z = 0
-            vel_error = 0
-        else:
-            vel_x = c * a * (beams[0] - beams[1])
-            vel_y = c * a * (beams[3] - beams[2])
-            vel_z = b * (beams[0] + beams[1] + beams[2] + beams[3])
-            vel_error = d * (beams[0] + beams[1] - beams[2] - beams[3])
-
-        return vel_x, vel_y, vel_z, vel_error
-
-    def instrument2Earth(self, roll, pitch, heading, v_x, v_y, v_z):
-        ''' Convert velocities in the instrument frame to the earth frame '''
-        rot_matrix1 = np.matrix([[math.cos(heading), math.sin(heading), 0],
-                                [-math.sin(heading), math.cos(heading), 0],
-                                [0, 0, 1]])
-        rot_matrix2 = np.matrix([[1, 0, 0],
-                                [0, math.cos(pitch), -math.sin(pitch)], 
-                                [0, math.sin(pitch), math.cos(pitch)]])
-        rot_matrix3 = np.matrix([[math.cos(roll), 0, math.sin(roll)], 
-                                [0, 1, 0],
-                                [-math.sin(roll), 0, math.cos(roll)]])
-
-        inst2earth_rot = rot_matrix1 * rot_matrix2 * rot_matrix3
-
-        v_inst = np.array([v_x, v_y, v_z])
-
-        v_earth = v_inst * inst2earth_rot
-
-        # print(v_earth[0][1])
-        # v_earth([0])
-        # v_earth = v_earth[0]
-        # print('v_earth: ', v_earth)
-        # print("v_earth 0:", v_earth[0])
-        return v_earth.item((0,0)), v_earth.item((0,1)), v_earth.item((0,2))
-
-
     def angleDiff(self,angle):
         while angle > math.pi:
             angle = angle - 2 * math.pi
@@ -1061,6 +1132,13 @@ class ASV_sim(ASV_robot):
         self.dt = 0.1
         self.actual_state = ASV_state(0,0,0)
         self.motor_stop = True
+        self.first_point = True
+        
+        time_stamp = datetime.datetime.now().replace(microsecond=0).strftime('%y-%m-%d %H.%M.%S')
+
+        if self.log_data == True:
+            self.all_data_filename = 'Log/ALL_' + time_stamp + ".csv"
+            self.all_data_f = open(self.all_data_filename, 'w')
 
     def sim_loop(self):
         if self.first_GPS:
@@ -1068,18 +1146,34 @@ class ASV_sim(ASV_robot):
             self.cur_des_point.y = self.state_est.y
             self.first_GPS = False
 
-        uR, uL, rudder = self.integral_LOS_pt(self.cur_des_point)
+        # uR, uL, rudder = self.integral_LOS_pt(self.cur_des_point)
         # uR, uL, rudder = self.point_track(self.cur_des_point)
-        # print("Left %f Right %f " % (uL, uR))  
-        # print(uR, uL)
+        uR, uL, rudder = self.transect_control2(self.cur_des_point, 1.5)
+        # uL, uR, rudder = self.main_controller(self.cur_des_point, 1.5)
         self.estimate_state()
         
         if self.motor_stop == True:
             uR = 0
             uL = 0
             rudder = 1515
-        
+        # print(uR, uL, rudder)
         self.update_state(self.actual_state, uR, uL, rudder)
+
+        # Calc v_x
+
+        cur_point = self.last_des_point
+        next_point = self.cur_des_point
+
+        line_angle = math.atan2((next_point.y - cur_point.y),(next_point.x - cur_point.x))                
+        v_ang_from_line = self.angleDiff(self.state_est.ang_course - line_angle)
+        v_x = self.state_est.v_course * math.cos(v_ang_from_line)
+        v_y = self.state_est.v_course * math.sin(v_ang_from_line)
+
+        current_state = [self.state_est.x, self.state_est.y, self.state_est.theta, self.state_est.v_course, self.state_est.ang_course, rudder, uL, uR, self.cur_des_point.x, self.cur_des_point.y, v_x, v_y]
+        current_state_str = "$CTRL," + ",".join(map(str,current_state))
+        self.all_data_f.write(current_state_str)
+        self.all_data_f.write('\n')
+
 
         self.update_waypoint()
         time.sleep(0.1)
@@ -1100,42 +1194,56 @@ class ASV_sim(ASV_robot):
         fake_state_str = "$STATE," + ",".join(map(str,fake_state)) + "\n" + '###'
         fake_state_msg = fake_state_str.encode()
         
-        if self.log_daa == True:
-            self.all_data_f.write(gps_msg)
-            self.all_data_f.write(adcp_msg)
-            self.all_data_f.write(fake_state_msg)
+        # if self.log_data == True:
+
+            # self.all_data_f.write(gps_msg)
+            # self.all_data_f.write(adcp_msg)
+            # self.all_data_f.write(fake_state_msg)
         
 
     def update_state(self, state, uR, uL, rudder):
         ''' for simulation '''
-        # uL = 0
-        # uR = 0
-        uR = -uR/ 200 /self.dt
-        uL = -uL/ 200 /self.dt
+
+        uR = -uR/ 100 
+        uL = -uL/ 100 
 
         # Rudder Angle
         rudder_rate = (1894 - 1195)/90
         rudder_ang = (rudder - 1515) / rudder_rate
         rudder_ang = -rudder_ang / 180 * math.pi
 
-        current_v = 3
-        current_ang = 0
-
-        b_l = 35 # sim linear drag
-        b_r = 30 # sim rotational drag 
-        I_zz = 30 # sim moment of inertia 
-        m = 30 # sim mass
+        b_l = 4 # sim linear drag
+        b_r = 2.5 # sim rotational drag 
+        I_zz = 50 # sim moment of inertia 
+        m = 5 # sim mass
         robot_radius = 0.5
+        x_cg = 0.9
+        w = 20
   
+         # Rudder Angle
+       #  b_l = 5 # sim linear drag
+       #  b_r = 2.5 # sim rotational drag 
+       #  I_zz = 50 # sim moment of inertia 
+       #  m = 5 # sim mass
+       #  robot_radius = 0.5
+  
+       # # update state
+       #  state.a = (uR + uL)/m - b_l/m * state.v
+       #  state.ang_acc = -b_r / I_zz * state.omega  + x_cg * rudder_ang * (uR + uL) * math.sin(rudder_ang) # + 1/I_zz * 2 * robot_radius * (uL - uR)
+
+       # update river current
+        # current_v = 2 * state.x / w * (2*state.x / w - 2) * state.current_v
+        current_v = state.current_v
+
        # update state
-        state.a = 10*(uR + uL)/m - b_l/m * state.v
-        state.ang_acc = -b_r / I_zz * state.omega + 1/I_zz * 2 * robot_radius * (uL - uR) + rudder_ang * (uR + uL)
+        state.a = (uR + uL)/m - b_l/m * state.v
+        state.ang_acc = -b_r / I_zz * state.omega  +  (uR + uL) * math.sin(rudder_ang) * x_cg
 
         state.v = state.v + state.a * self.dt
         state.omega = state.omega + state.ang_acc * self.dt 
 
-        robot_vx = state.v * math.cos(state.theta) + state.current_v * math.cos(state.current_ang)
-        robot_vy = state.v * math.sin(state.theta) + state.current_v * math.sin(state.current_ang)
+        robot_vx = state.v * math.cos(state.theta) + current_v * math.cos(state.current_ang)
+        robot_vy = state.v * math.sin(state.theta) + current_v * math.sin(state.current_ang)
         v_robot = np.array([robot_vx, robot_vy])
         
         state.ang_course = math.atan2(v_robot[1], v_robot[0])

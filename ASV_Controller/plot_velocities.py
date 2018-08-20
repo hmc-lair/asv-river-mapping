@@ -19,15 +19,15 @@ CELL_RES = 0.5
 Z_CELL_RES = 0.06
 sigma_slope = 0.5
 sigma_offset = 0.6142
-win = 5
+win = 1
 z_win = 2
 TRANSDUCER_OFFSET = 0.1 #m
 BEAM_ANGLE = 20 #degrees
 
 
 # data_file = "Log/_7-27/ALL_18-07-12 06.47.41.bin" # River
-data_file = "Log/DATA_18-07-12 06.47.41.csv" #River
-map_file = '../Maps/river_7-27.tif'
+data_file = "Log/DATA_18-07-12 11.35.45.csv" #River
+map_file = '../Maps/river_8-13.tif'
 
 # data_file = "Log/DATA_18-07-12 06.49.05.csv" ##lake
 # map_file = '../Maps/lake_7-27.tif'
@@ -292,7 +292,7 @@ def main():
 
     y_axis = np.arange(min_y, min_y + n*CELL_RES, CELL_RES)
     x_axis = np.arange(min_x, min_x + m*CELL_RES, CELL_RES)
-    z_axis = -np.arange(min_z, min_z + l*Z_CELL_RES, Z_CELL_RES)
+    z_axis = -np.arange(min_z + Z_CELL_RES, min_z + (l)*Z_CELL_RES, Z_CELL_RES)
     X_plot, Y_plot, Z_plot = np.meshgrid(x_axis, y_axis, z_axis)
 
     # Save the unfiltered coordinate before other invalids got turn 
@@ -302,6 +302,7 @@ def main():
 
     # Filter out zero vectors
     mask = np.logical_or(B_vx_new != 0, B_vy_new != 0, B_vz_new != 0)
+    print(len(z_axis), l , B_vz_new.shape, X_plot.shape, mask.shape)
     X_plot = np.where(mask, X_plot, np.nan)
     Y_plot = np.where(mask, Y_plot, np.nan)
     Z_plot = np.where(mask, Z_plot, np.nan)
