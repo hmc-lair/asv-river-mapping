@@ -20,6 +20,9 @@ class ASV_Controller:
         self.depth = 0.0
         self.cur_speed = 0.0
 
+        # 
+        self.v_x = 0
+
         if self.mode == "HARDWARE MODE":
             self.sim_env = ASV_environment.ASV_sim_env()
             self.robot = ASV_robot.ASV_robot(self.sim_env)
@@ -96,7 +99,8 @@ class ASV_Controller:
                 self.robot.state_est.theta = float(parsed_data[3])
                 self.depth = float(parsed_data[4])
                 self.cur_speed = float(parsed_data[5])
-
+                self.robot.state_est.v_course = float(parsed_data[6])
+                self.v_x = float(parsed_data[7])
 
 
         except KeyboardInterrupt:

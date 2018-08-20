@@ -207,7 +207,7 @@ class ASV_robot:
         if (self.environment.robot_mode == "HARDWARE MODE"):
             self.environment.setup_GPS()
             self.environment.setup_motors()
-            self.environment.setup_ADCP()
+            # self.environment.setup_ADCP()
             self.environment.setup_arduino()
             
             if self.environment.disable_xbee == True:
@@ -244,8 +244,8 @@ class ASV_robot:
         
         # Begin threads
         self.GPS_thread.start()
-        self.environment.start_ping()
-        self.ADCP_thread.start()
+        # self.environment.start_ping()
+        # self.ADCP_thread.start()
         self.mag_thread.start()
 
     def robot_shutdown(self):
@@ -777,9 +777,10 @@ class ASV_robot:
         elif parsed_data[0] == "!TRANSECT":
             self.K_v = float(parsed_data[1])
             self.K_latAng = float(parsed_data[2])
-            self.velocity_update_rate = int(parsed_data[3])
-            self.angle_update_rate = int(parsed_data[4])
-            self.v_x_des = float(parsed_data[5])
+            self.K_vert = float(parsed_data[3])
+            self.velocity_update_rate = int(parsed_data[4])
+            self.angle_update_rate = int(parsed_data[5])
+            self.v_x_des = float(parsed_data[6])
             print('Transect Gains Received.')
         else:
             print('Unknown command!')
@@ -794,7 +795,7 @@ class ASV_robot:
             if self.terminate == False:
                 average_depth = sum(self.depths)/len(self.depths)
                 current_speed = math.sqrt(self.v_boat[0]**2 + self.v_boat[1]**2)
-                msg = "!DATA, %f, %f, %f, %f, %f" % (self.state_est.x, self.state_est.y, self.heading, average_depth, current_speed)
+                msg = "!DATA, %f, %f, %f, %f, %f, %f, %f" % (self.state_est.x, self.state_est.y, self.heading, average_depth, current_speed, self.state_est.v_course, self.v_x)
                 msg_binary = msg.encode()
                 self.environment.my_xbee.send_data_async(self.environment.dest_xbee, msg_binary)
 
