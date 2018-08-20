@@ -28,7 +28,7 @@ import math
 
 IMAGE_WIDTH = 200
 IMAGE_HEIGHT = 100
-MAP_FILE = '../Maps/output.tif' #perhaps for last deployment
+MAP_FILE = '../Maps/river_8-13.tif' #perhaps for last deployment
 
 MAP_WIDTH = 600#800
 MAP_HEIGHT = 400#600

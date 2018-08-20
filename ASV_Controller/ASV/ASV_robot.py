@@ -27,7 +27,7 @@ class ASV_robot:
         self.cur_des_point.set_state(1,1,1)
         self.way_points = []
         self.des_reached = True
-        self.dist_threshold = 3
+        self.dist_threshold = 2
         self.dt = 0.01
         self.motor_stop = True
         self.first_GPS = True
@@ -60,6 +60,8 @@ class ASV_robot:
         self.last_v_des=  0
         self.last_ang_des = 0
         self.last_drift_error = 0
+        self.last_drift_error2 = 0
+        self.error_integral = 0
         self.v_x = 0 # current velocity toward the point
 
         # Controller 1
@@ -157,8 +159,8 @@ class ASV_robot:
         # Compute control signal
         # port, strboard = self.diff_point_track(self.cur_des_point) # differential drive controller
         # port, strboard, rudder = self.point_track(self.cur_des_point) # servo drive controller
-        self.port, self.strboard, self.rudder = self.integral_LOS_pt(self.cur_des_point)
-
+        # self.port, self.strboard, self.rudder = self.integral_LOS_pt(self.cur_des_point)
+        self.port, self.strboard, self.rudder = self.main_controller(self.cur_des_point, self.v_x_des)
 
         # System Identificaiton Test
         # self.port = -800
@@ -428,6 +430,10 @@ class ASV_robot:
         pos_ang_from_line = self.angleDiff(position_angle - line_angle)
         dist = math.sqrt((self.state_est.y - cur_point.y)**2 + (self.state_est.x - cur_point.x)**2 )
         drift_distance = dist * math.sin(pos_ang_from_line)
+
+        self.error_integral = self.error_integral + drift_distance * self.dt
+        # self.last_drift_error = drift_distance
+        # self.last_drift_error2 = self.last_drift_error
 
         v_correct = -drift_distance * K_v
         return v_correct
@@ -739,7 +745,7 @@ class ASV_robot:
             wp = ASV_state()
             wp.x = float(parsed_data[1]) # way point in local x, y
             wp.y = float(parsed_data[2]) 
-            # wp.control_type = int(parsed_data[3])
+            wp.control_type = int(parsed_data[3])
             self.add_way_point(wp)
             self.des_reached = False
         elif parsed_data[0] == "!STARTMISSION":
@@ -1148,8 +1154,8 @@ class ASV_sim(ASV_robot):
 
         # uR, uL, rudder = self.integral_LOS_pt(self.cur_des_point)
         # uR, uL, rudder = self.point_track(self.cur_des_point)
-        uR, uL, rudder = self.transect_control2(self.cur_des_point, 1.5)
-        # uL, uR, rudder = self.main_controller(self.cur_des_point, 1.5)
+        # uR, uL, rudder = self.transect_control2(self.cur_des_point, 1.5)
+        uL, uR, rudder = self.main_controller(self.cur_des_point, 1.5)
         self.estimate_state()
         
         if self.motor_stop == True:
