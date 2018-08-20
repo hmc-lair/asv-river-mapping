@@ -11,24 +11,21 @@ import math
 # IMAGE_HEIGHT = 250.
 # MAP_FILE = '../Maps/cast.tif'
 
-
-
 # IMAGE_WIDTH = 200
 # IMAGE_HEIGHT = 150
 # MAP_FILE = '../Maps/millikan.tif'
-
 
 # IMAGE_WIDTH = 1000
 # IMAGE_HEIGHT = 700
 # MAP_FILE = '../Maps/lake_7-27.tif'
 
-IMAGE_WIDTH = 300
-IMAGE_HEIGHT = 200
-MAP_FILE = '../Maps/river_8-13.tif'
+# IMAGE_WIDTH = 300
+# IMAGE_HEIGHT = 200
+# MAP_FILE = '../Maps/river_8-13.tif'
 
 # IMAGE_WIDTH = 200
 # IMAGE_HEIGHT = 100
-# MAP_FILE = '../Maps/output.tif' #perhaps for last deployment
+# MAP_FILE = '../Maps/river_8-21.tif'
 
 MAP_WIDTH = 600#800
 MAP_HEIGHT = 400#600
@@ -137,7 +134,7 @@ class ASV_graphics:
         # self.control_wp_dxdy = Label(self.sidebar_frame, anchor='w', width=30, text='dx: ???, dy: ???')
         # self.control_wp_dxdy.pack()
 
-        self.auv_status = Label(self.sidebar_frame, anchor='w', text='AUV Status: STOPPED', fg="red")
+        self.auv_status = Label(self.sidebar_frame, anchor='w', text='ASV Status: STOPPED', fg="red")
         self.auv_status.pack()
 
         self.repeat_mission_label = Label(self.sidebar_frame, anchor='w', text='Repeat Mission: NO', fg="red")
@@ -238,7 +235,9 @@ class ASV_graphics:
         self.set_heading_offset = Button(self.compass_frame, anchor='w', text='Set Heading Offset', command=self.on_set_heading_offset).pack()
 
         # Control parameters/speed
-        self.control_config = Label(self.control_config_frame, anchor='w', text='Control Parameters', font='Helvetica 14 bold').pack()
+        self.control_config = Label(self.control_config_frame, anchor='w', text='Control', font='Helvetica 14 bold').pack()
+        self.control_info = Label(self.control_config_frame, anchor='w', text='ASV Speed: ?\n Speed to Dest: ?\n', fg="red")
+        self.control_info.pack()
         # self.origin = Button(self.sidebar_frame, anchor='w', text='Set Map Origin', command=self.on_toggle_set_origin)
         # self.origin.pack()
 
@@ -268,6 +267,10 @@ class ASV_graphics:
         self.Kp_nom = Entry(self.Kp_frame, width=5)
         self.Kp_nom.insert(END, '500')
         self.Kp_nom.pack(side='left')
+        self.K_vi_label = Label(self.Kp_frame, anchor='w', text='K_vi').pack(side='left')
+        self.K_vi = Entry(self.Kp_frame, width=5)
+        self.K_vi.insert(END, '1')
+        self.K_vi.pack(side='left')
 
         #######################################################################
         # Transect Parameters
@@ -277,22 +280,22 @@ class ASV_graphics:
         self.transect_frame1.pack()
         self.K_v_label = Label(self.transect_frame1, anchor='w', text='K_v').pack(side='left')
         self.K_v = Entry(self.transect_frame1, width=5)
-        self.K_v.insert(END, '1')
+        self.K_v.insert(END, '0.5')
         self.K_v.pack(side='left')
         self.K_latAng_label = Label(self.transect_frame1, anchor='w', text='K_latAng').pack(side='left')
         self.K_latAng = Entry(self.transect_frame1, width=5)
-        self.K_latAng.insert(END, '2')
+        self.K_latAng.insert(END, '0.1')
         self.K_latAng.pack(side='left')
         self.K_vert_label = Label(self.transect_frame1, anchor='w', text='K_vert').pack(side='left')
         self.K_vert = Entry(self.transect_frame1, width=5)
-        self.K_vert.insert(END, '3')
+        self.K_vert.insert(END, '600')
         self.K_vert.pack(side='left')
 
         self.transect_frame2 = Frame(self.control_config_frame)
         self.transect_frame2.pack()
         self.v_rate_label = Label(self.transect_frame2, anchor='w', text='v_rate').pack(side='left')
         self.v_rate = Entry(self.transect_frame2, width=5)
-        self.v_rate.insert(END, '4')
+        self.v_rate.insert(END, '5')
         self.v_rate.pack(side='left')
         self.a_rate_label = Label(self.transect_frame2, anchor='w', text='a_rate').pack(side='left')
         self.a_rate = Entry(self.transect_frame2, width=5)
@@ -300,7 +303,7 @@ class ASV_graphics:
         self.a_rate.pack(side='left')
         self.vx_des_label = Label(self.transect_frame2, anchor='w', text='vx_des').pack(side='left')
         self.vx_des = Entry(self.transect_frame2, width=5)
-        self.vx_des.insert(END, '6')
+        self.vx_des.insert(END, '0.5')
         self.vx_des.pack(side='left')
 
         #######################################################################
@@ -401,11 +404,15 @@ class ASV_graphics:
             print('Waypoints:', self.mission_wps)
 
             if self.controller.mode == 'HARDWARE MODE':
+                wp_checksum_msg = '!WPNUM, %d' % len(self.mission_wps)
+                self.controller.local_xbee.send_data_async(self.controller.boat_xbee, wp_checksum_msg.encode())
+                time.sleep(0.1)
                 for x, y, mode in self.mission_wps:
                     #Send waypoints one at a time
                     way_point_msg = "!WP, %f, %f, %d" % (x, y, mode)
                     print(way_point_msg)
                     self.controller.local_xbee.send_data_async(self.controller.boat_xbee, way_point_msg.encode())
+                    time.sleep(0.1)
                 start_mission_msg = "!STARTMISSION"
                 self.controller.local_xbee.send_data_async(self.controller.boat_xbee, start_mission_msg.encode())
             else:
@@ -671,7 +678,7 @@ class ASV_graphics:
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, control_msg.encode())
 
         #Also send transect params...
-        control_msg = '!TRANSECT, %f, %f, %f, %f, %f, %f' % (float(self.K_v.get()), float(self.K_latAng.get()), float(self.K_vert.get()), float(self.v_rate.get()), float(self.a_rate.get()), float(self.vx_des.get()))
+        control_msg = '!TRANSECT, %f, %f, %f, %d, %d, %f, %f' % (float(self.K_v.get()), float(self.K_latAng.get()), float(self.K_vert.get()), int(self.v_rate.get()), int(self.a_rate.get()), float(self.vx_des.get()), float(self.K_vi.get()))
         print(control_msg)
         if self.controller.mode == 'HARDWARE MODE':
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, control_msg.encode())
@@ -690,6 +697,7 @@ class ASV_graphics:
     def update(self):
         self.update_GPS()
         self.update_ADCP()
+        self.update_speeds()
 
         # Simulation Mode
         if self.controller.mode == "SIM MODE":
@@ -700,6 +708,10 @@ class ASV_graphics:
 
         return self.quit_gui == False
 
+    def update_speeds(self):
+        asv_speed = self.controller.robot.state_est.v_course
+        to_dest = self.controller.v_x
+        self.control_info['text'] = 'ASV Speed: ' + str(round(asv_speed, 3)) + '\nSpeed to Dest: ' + str(round(to_dest,3)) + '\n'
 
     def update_GPS(self):
         '''Get local x, y coordinate from robot. Then convert to utm for graphing'''
