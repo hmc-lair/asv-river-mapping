@@ -1177,8 +1177,9 @@ class ASV_sim(ASV_robot):
 
         current_state = [self.state_est.x, self.state_est.y, self.state_est.theta, self.state_est.v_course, self.state_est.ang_course, rudder, uL, uR, self.cur_des_point.x, self.cur_des_point.y, v_x, v_y]
         current_state_str = "$CTRL," + ",".join(map(str,current_state))
-        self.all_data_f.write(current_state_str)
-        self.all_data_f.write('\n')
+        if self.log_data:
+            self.all_data_f.write(current_state_str)
+            self.all_data_f.write('\n')
 
 
         self.update_waypoint()

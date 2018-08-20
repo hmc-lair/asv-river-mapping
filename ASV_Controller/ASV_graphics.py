@@ -22,13 +22,13 @@ import math
 # IMAGE_HEIGHT = 700
 # MAP_FILE = '../Maps/lake_7-27.tif'
 
-# IMAGE_WIDTH = 300
-# IMAGE_HEIGHT = 200
-# MAP_FILE = '../Maps/river_8-13.tif'
+IMAGE_WIDTH = 300
+IMAGE_HEIGHT = 200
+MAP_FILE = '../Maps/river_8-13.tif'
 
-IMAGE_WIDTH = 200
-IMAGE_HEIGHT = 100
-MAP_FILE = '../Maps/river_8-13.tif' #perhaps for last deployment
+# IMAGE_WIDTH = 200
+# IMAGE_HEIGHT = 100
+# MAP_FILE = '../Maps/output.tif' #perhaps for last deployment
 
 MAP_WIDTH = 600#800
 MAP_HEIGHT = 400#600
@@ -163,7 +163,7 @@ class ASV_graphics:
         # 2) Mission planning
         self.mission_title = Label(self.sidebar_frame, anchor='w', text='Mission Planning', font='Helvetica 14 bold').pack()
         self.mission_disclaimer = Label(self.sidebar_frame, 
-            anchor='w', text='Red=Point Tracking, Orange=Transect.\nClick on WP in map to change color.', font='Helvetica 10 italic').pack()
+            anchor='w', text='Red=Point Tracking(1), Orange=Transect(2).\nClick on WP in map to change color.', font='Helvetica 10 italic').pack()
         self.mission_frame = Frame(self.sidebar_frame)
         self.scrollbar = Scrollbar(self.mission_frame)
         self.scrollbar.pack(side='right')
@@ -425,7 +425,7 @@ class ASV_graphics:
             self.mission_add_wps.configure(text='Add Waypoints')
         else:
             self.add_wps_mode = True
-            self.mission_add_wps.configure(text='Done Selecting Waypoints')
+            self.mission_add_wps.configure(text='Done Adding Waypoints')
         print('Add wps mode: ', self.add_wps_mode)
 
     def on_toggle_remove_wps(self):
@@ -528,6 +528,7 @@ class ASV_graphics:
             self.wp_markers.append(self.draw_circle(col, row))
             self.wp_labels.append(self.draw_label(col, row))
             self.wp_list.insert('end', self.w_name.cget('text') + str(lat) + ',' + str(lon))
+            self.canvas.tag_bind(self.wp_markers[-1], '<ButtonPress-1>', self.on_wp_click) 
 
     def on_save_mission(self):
         mission_file = input('Mission file name? ')
