@@ -45,6 +45,7 @@ class ASV_robot:
         self.last_ang_error = 0.0 # Memories for derivative and integral control
         self.last_ang_error2 = 0.0
         self.last_u_rudder = 0.0
+        self.ang_error_integral = 0
 
         # Course keep controller param
         # Controller 2
@@ -54,6 +55,7 @@ class ASV_robot:
         self.angle_update_rate = 5 # decide how often to control the angles
         self.velocity_update_rate = 5 # decide how often to control the velocity
         self.v_x_des = 0.5
+        self.K_vi = 1 # error integral term
 
         self.ang_update_count = 0 # Memories to control angle and velocity update rate
         self.vert_update_count = 0
@@ -61,7 +63,7 @@ class ASV_robot:
         self.last_ang_des = 0
         self.last_drift_error = 0
         self.last_drift_error2 = 0
-        self.error_integral = 0
+        self.drift_error_integral = 0
         self.v_x = 0 # current velocity toward the point
 
         # Controller 1
@@ -115,6 +117,8 @@ class ASV_robot:
         self.ADCP_thread = None
         self.mag_thread = None
         self.check_xbee_thread = None
+
+        self.way_point_checksum = 0
 
         self.bad_connection_limit = 100
 
@@ -207,7 +211,7 @@ class ASV_robot:
         if (self.environment.robot_mode == "HARDWARE MODE"):
             self.environment.setup_GPS()
             self.environment.setup_motors()
-            # self.environment.setup_ADCP()
+            self.environment.setup_ADCP()
             self.environment.setup_arduino()
             
             if self.environment.disable_xbee == True:
@@ -244,8 +248,8 @@ class ASV_robot:
         
         # Begin threads
         self.GPS_thread.start()
-        # self.environment.start_ping()
-        # self.ADCP_thread.start()
+        self.environment.start_ping()
+        self.ADCP_thread.start()
         self.mag_thread.start()
 
     def robot_shutdown(self):
@@ -431,11 +435,10 @@ class ASV_robot:
         dist = math.sqrt((self.state_est.y - cur_point.y)**2 + (self.state_est.x - cur_point.x)**2 )
         drift_distance = dist * math.sin(pos_ang_from_line)
 
-        self.error_integral = self.error_integral + drift_distance * self.dt
-        # self.last_drift_error = drift_distance
-        # self.last_drift_error2 = self.last_drift_error
+        # adding an integral term to remove error
+        self.drift_error_integral = self.drift_error_integral + drift_distance * self.dt
 
-        v_correct = -drift_distance * K_v
+        v_correct = -drift_distance * K_v - self.drift_error_integral * self.K_vi
         return v_correct
 
 
@@ -479,6 +482,7 @@ class ASV_robot:
                     ang_des = self.last_ang_des
 
                 u_rudder = self.heading_control(ang_des)
+                print('u_rudder ', u_rudder)
                 u_port, u_starboard = self.vertical_position_hold(self.cur_des_point, -u_vert)
         
         return u_port, u_starboard, u_rudder
@@ -504,7 +508,11 @@ class ASV_robot:
         else:
             des_line_heading = self.angleDiff((v_x - v_x_des) * self.K_latAng + heading_from_line)
         
+
         new_ang = self.angleDiff(des_line_heading + line_angle)
+        print("V_x Difference ", v_x - v_x_des)
+        print("Desired Angle ", new_ang)
+        print("Current Angle ", self.state_est.theta)
         return new_ang
 
     def vertical_position_hold(self, des_point, vertical_speed):
@@ -556,7 +564,11 @@ class ASV_robot:
         off_track_error = distance * math.sin(self.angleDiff(angle_off - track_angle))
 
         int_gain = self.Ki
-        off_int = int_gain * off_track_error * self.dt / 2 + int_gain * self.last_offtrack_error * self.dt/2
+        self.ang_error_integral = self.ang_error_integral + off_track_error * self.dt
+        off_int = self.ang_error_integral * self.Ki
+        print("Off_int ", off_int)
+        
+        # off_int = int_gain * off_track_error * self.dt / 2 + int_gain * self.last_offtrack_error * self.dt/2
 
         self.last_offtrack_error = off_track_error
         
@@ -667,7 +679,7 @@ class ASV_robot:
             self.last_ang_error2 = self.last_ang_error
             self.last_u_rudder = u_rudder
 
-            u_nom = (speed_des - v_x) * self.Kp_nom + 100
+            u_nom = (self.v_x_des - v_x) * self.Kp_nom + 100
 
             u_port = u_nom
             u_starboard = u_nom
@@ -752,8 +764,13 @@ class ASV_robot:
             self.cur_des_point = self.way_points[0]
             self.last_des_point.x = self.state_est.x
             self.last_des_point.y = self.state_est.y
-            self.des_reached = False
+            if self.way_point_checksum != len(self.way_points):
+                print("Checksum: %d, Points in queue %d" % (self.way_point_checksum, len(self.way_points)))
+                return 
             self.first_point = True
+            self.des_reached = False
+        elif parsed_data[0] == "!WPNUM":
+            self.way_point_checksum = int(parsed_data[1])
         elif parsed_data[0] == "!ABORTMISSION":
             self.way_points = []
             self.motor_stop  = True
@@ -781,6 +798,7 @@ class ASV_robot:
             self.velocity_update_rate = int(parsed_data[4])
             self.angle_update_rate = int(parsed_data[5])
             self.v_x_des = float(parsed_data[6])
+            self.K_vi = float(parsed_data[7])
             print('Transect Gains Received.')
         else:
             print('Unknown command!')
@@ -1153,10 +1171,10 @@ class ASV_sim(ASV_robot):
             self.cur_des_point.y = self.state_est.y
             self.first_GPS = False
 
-        # uR, uL, rudder = self.integral_LOS_pt(self.cur_des_point)
+        uR, uL, rudder = self.integral_LOS_pt(self.cur_des_point)
         # uR, uL, rudder = self.point_track(self.cur_des_point)
         # uR, uL, rudder = self.transect_control2(self.cur_des_point, 1.5)
-        uL, uR, rudder = self.main_controller(self.cur_des_point, 1.5)
+        # uL, uR, rudder = self.main_controller(self.cur_des_point, 1.5)
         self.estimate_state()
         
         if self.motor_stop == True:
