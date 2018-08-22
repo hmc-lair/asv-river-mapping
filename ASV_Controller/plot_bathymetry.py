@@ -8,42 +8,32 @@ import gdal
 
 from read_asv_data import read_ensemble
 
-
 BEAM_ANGLE = 20 #degrees
 TRANSDUCER_OFFSET = 0.1 #m
 
-#ASV log files
-millikan1 = 'Log/millikan_7-19/ALL_18-07-11 23.59.36.bin' #1) GOOD MAP OF MILLIKAN
-millikan2 = 'Log/millikan_7-19/ALL_18-07-12 00.16.04.bin' #2) Good
-millikan3 = 'Log/millikan_7-19/ALL_18-07-11 23.36.33.bin' #3) Good
-millikan4 = 'Log/millikan_7-19/ALL_18-07-12 00.24.24.bin' #4) Large range
-
-millikan_new = 'Log/millikan/ALL_18-07-12 08.13.15.bin'
-
-lake1 = 'Log/lake_7-27/ALL_18-07-12 06.49.05.bin'
-
-river1 = 'Log/river_7-27/ALL_18-07-12 06.47.41.bin'
-river2 = 'Log/river_7-27/ALL_18-07-12 06.38.10.bin'
+# Last Bakersfield deployment
+river_lawnmower = 'Log/river_8-21/ALL_18-07-12 14.12.07.bin' # 5MB
+river_transect_long = 'Log/river_8-21/ALL_18-07-12 15.03.46.bin' #9.1MB
+river_longlawnmower = 'Log/river_8-21/ALL_18-07-12 15.41.49.bin' #10MB
+river_idk = 'Log/river_8-21/ALL_18-07-12 14.51.23.bin'
 
 ########################################
-river1 = 'Log/river_8-13/ALL_18-07-12 11.35.45.bin'
 
-river_8_21 = 'Log/Second_transect.bin'
-
-data_file = river_8_21
+data_file = river_longlawnmower
 
 #Mission files
-#TODO: add mission file
-# mission_file = 'Missions/millikan_real_test.csv'
+mission_file = 'Missions/river_longlawnmower.csv'
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
-map_file = '../Maps/river_8-21.tif'
+map_file = '../Maps/river_8-13.tif'
 # map_file = '../Maps/cast.tif'
 
 # Plot parameters
-CELL_RES = 1
-win = 5
+CELL_RES = 1 #cell resolution
+
+# Kalman filter parameters
+win = 5 #window size
 sigma_slope = 0.1204
 sigma_offset = 0.6142
 
@@ -187,9 +177,9 @@ def main():
         Y_pix.append(col)
     plt.plot(X_pix, Y_pix, color='black', zorder=2, label='GPS readings')
     # mission wps
-    # mission_X, mission_Y = read_mission_file(mission_file, inv_trans)
-    # plt.plot(mission_X, mission_Y, color='red', marker='.', label='Mission plan')
-    # plt.legend()
+    mission_X, mission_Y = read_mission_file(mission_file, inv_trans)
+    plt.plot(mission_X, mission_Y, color='red', marker='.', label='Mission plan')
+    plt.legend()
 
     X_plot, Y_plot = np.meshgrid(np.arange(min_y, min_y + n*CELL_RES, CELL_RES), np.arange(min_x, min_x + m*CELL_RES, CELL_RES))
     
@@ -205,8 +195,9 @@ def main():
 
     # # 3) Scatter plot of raw data
     ax2 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    ax2.scatter(ASV_nor, ASV_eas, Z, c=Z, cmap=cm.viridis)
-    ax2.plot(ASV_nor, ASV_eas, np.zeros(len(X)), color='red') #ASV path
+
+    ax2.scatter(ASV_eas, ASV_nor, Z, c=Z, cmap=cm.viridis)
+    ax2.plot(ASV_eas, ASV_nor, np.zeros(len(X)), color='red') #ASV path
     ax2.view_init(200, -50)
     ax2.set_zlabel('Depth (m)')
     ax2.invert_zaxis()
