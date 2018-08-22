@@ -19,13 +19,9 @@ import math
 # IMAGE_HEIGHT = 700
 # MAP_FILE = '../Maps/lake_7-27.tif'
 
-# IMAGE_WIDTH = 300
-# IMAGE_HEIGHT = 200
-# MAP_FILE = '../Maps/river_8-13.tif'
-
-# IMAGE_WIDTH = 200
-# IMAGE_HEIGHT = 100
-# MAP_FILE = '../Maps/river_8-21.tif'
+IMAGE_WIDTH = 300
+IMAGE_HEIGHT = 200
+MAP_FILE = '../Maps/river_8-13.tif'
 
 MAP_WIDTH = 600#800
 MAP_HEIGHT = 400#600
@@ -265,11 +261,11 @@ class ASV_graphics:
         self.Kp_ang.pack(side='left')
         self.Kp_nom_label = Label(self.Kp_frame, anchor='w', text='K_nom').pack(side='left')
         self.Kp_nom = Entry(self.Kp_frame, width=5)
-        self.Kp_nom.insert(END, '500')
+        self.Kp_nom.insert(END, '1000')
         self.Kp_nom.pack(side='left')
         self.K_vi_label = Label(self.Kp_frame, anchor='w', text='K_vi').pack(side='left')
         self.K_vi = Entry(self.Kp_frame, width=5)
-        self.K_vi.insert(END, '1')
+        self.K_vi.insert(END, '0')
         self.K_vi.pack(side='left')
 
         #######################################################################
@@ -284,11 +280,11 @@ class ASV_graphics:
         self.K_v.pack(side='left')
         self.K_latAng_label = Label(self.transect_frame1, anchor='w', text='K_latAng').pack(side='left')
         self.K_latAng = Entry(self.transect_frame1, width=5)
-        self.K_latAng.insert(END, '0.1')
+        self.K_latAng.insert(END, '0.5')
         self.K_latAng.pack(side='left')
         self.K_vert_label = Label(self.transect_frame1, anchor='w', text='K_vert').pack(side='left')
         self.K_vert = Entry(self.transect_frame1, width=5)
-        self.K_vert.insert(END, '600')
+        self.K_vert.insert(END, '1000')
         self.K_vert.pack(side='left')
 
         self.transect_frame2 = Frame(self.control_config_frame)
@@ -303,7 +299,7 @@ class ASV_graphics:
         self.a_rate.pack(side='left')
         self.vx_des_label = Label(self.transect_frame2, anchor='w', text='vx_des').pack(side='left')
         self.vx_des = Entry(self.transect_frame2, width=5)
-        self.vx_des.insert(END, '0.5')
+        self.vx_des.insert(END, '1')
         self.vx_des.pack(side='left')
 
         #######################################################################
@@ -362,6 +358,10 @@ class ASV_graphics:
                 mode = 1 #point track
                 if color == transect_color:
                     mode = 2 #transect
+                # if count == 0:
+                #     mode = 1
+                # else:
+                #     mode = 2
 
                 wps.append((x,y,mode))
                 count += 1
@@ -513,7 +513,7 @@ class ASV_graphics:
             print('Cancelling clear waypoint request')
 
     def on_load_mission(self):
-        mission_file = input('Mission file name? ') #example: sample_mission (file @ Missions/sample_mission.csv)
+        mission_file = input('Mission file name (exclude ".csv")? ') #example: sample_mission (file @ Missions/sample_mission.csv)
         coords = []
         with open('Missions/' + mission_file + '.csv', 'r') as f:
             for line in f.readlines():
@@ -538,7 +538,7 @@ class ASV_graphics:
             self.canvas.tag_bind(self.wp_markers[-1], '<ButtonPress-1>', self.on_wp_click) 
 
     def on_save_mission(self):
-        mission_file = input('Mission file name? ')
+        mission_file = input('Mission file name (exclude ".csv")? ')
         print(mission_file)
         #TODO: check if mission already in directory. if so ask if want to overwrite!
         with open('Missions/' + mission_file + '.csv', 'w') as f:
@@ -564,7 +564,7 @@ class ASV_graphics:
         self.border_markers = []
 
     def on_load_border(self):
-        border_file = input('Border file name? ') #example: sample_mission (file @ Missions/sample_mission.csv)
+        border_file = input('Border file name (exclude ".csv")? ') #example: sample_mission (file @ Missions/sample_mission.csv)
         coords = []
         with open('Borders/' + border_file + '.csv', 'r') as f:
             for line in f.readlines():
@@ -577,7 +577,7 @@ class ASV_graphics:
             self.border_markers.append(self.draw_circle(col, row, border=True))
 
     def on_save_border(self):
-        border_file = input('Border file name? ')
+        border_file = input('Border file name (exclude ".csv")? ')
         #TODO: check if mission already in directory. if so ask if want to overwrite!
         with open('Borders/' + border_file + '.csv', 'w') as f:
             for point in self.border_markers:
