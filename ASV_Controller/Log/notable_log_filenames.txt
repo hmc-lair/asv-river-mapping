@@ -1,0 +1,30 @@
+Notable ASV log files
+In plot_bathymetry.py, set "data_file" equal to any of these file names
+
+
+millikan1 = 'Log/millikan_7-19/ALL_18-07-11 23.59.36.bin' #1) GOOD MAP OF MILLIKAN
+millikan2 = 'Log/millikan_7-19/ALL_18-07-12 00.16.04.bin' #2) Good
+millikan3 = 'Log/millikan_7-19/ALL_18-07-11 23.36.33.bin' #3) Good
+millikan4 = 'Log/millikan_7-19/ALL_18-07-12 00.24.24.bin' #4) Large range
+
+millikan_new = 'Log/millikan/ALL_18-07-12 08.13.15.bin'
+
+lake1 = 'Log/lake_7-27/ALL_18-07-12 06.49.05.bin'
+
+river1 = 'Log/river_7-27/ALL_18-07-12 06.47.41.bin'
+river2 = 'Log/river_7-27/ALL_18-07-12 06.38.10.bin'
+
+########################################
+river1 = 'Log/river_8-13/ALL_18-07-12 11.35.45.bin' #1) Largest file
+river2 = 'Log/river_8-13/ALL_18-07-12 10.54.10.bin' #2) Box
+river3 = 'Log/river_8-13/ALL_18-07-12 13.47.19.bin' #3) Fence
+river4 = 'Log/river_8-13/ALL_18-07-12 12.22.21.bin' #4) Similar fence
+river5 = 'Log/river_8-13/ALL_18-07-12 10.58.35.bin'
+
+########################################
+# Last deployment
+
+river_lawnmower = 'Log/river_8-21/ALL_18-07-12 14.12.07.bin' # 5MB
+river_transect_long = 'Log/river_8-21/ALL_18-07-12 15.03.46.bin' #9.1MB
+river_longlawnmower = 'Log/river_8-21/ALL_18-07-12 15.41.49.bin' #10MB
+river_idk = 'Log/river_8-21/ALL_18-07-12 14.51.23.bin'
