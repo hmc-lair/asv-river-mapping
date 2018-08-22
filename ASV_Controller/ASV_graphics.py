@@ -19,9 +19,9 @@ import math
 # IMAGE_HEIGHT = 700
 # MAP_FILE = '../Maps/lake_7-27.tif'
 
-# IMAGE_WIDTH = 300
-# IMAGE_HEIGHT = 200
-# MAP_FILE = '../Maps/river_8-13.tif'
+IMAGE_WIDTH = 300
+IMAGE_HEIGHT = 200
+MAP_FILE = '../Maps/river_8-13.tif'
 
 # IMAGE_WIDTH = 200
 # IMAGE_HEIGHT = 100

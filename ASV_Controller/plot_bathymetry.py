@@ -28,7 +28,9 @@ river2 = 'Log/river_7-27/ALL_18-07-12 06.38.10.bin'
 ########################################
 river1 = 'Log/river_8-13/ALL_18-07-12 11.35.45.bin'
 
-data_file = river
+river_8_21 = 'Log/Second_transect.bin'
+
+data_file = river_8_21
 
 #Mission files
 #TODO: add mission file
@@ -36,7 +38,7 @@ data_file = river
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
-map_file = '../Maps/kern_river.tif'
+map_file = '../Maps/river_8-21.tif'
 # map_file = '../Maps/cast.tif'
 
 # Plot parameters
@@ -202,14 +204,14 @@ def main():
     ax1.set_ylabel('Northing (m)')
 
     # # 3) Scatter plot of raw data
-    # ax2 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    # ax2.scatter(ASV_nor, ASV_eas, Z, c=Z, cmap=cm.viridis)
-    # ax2.plot(ASV_nor, ASV_eas, np.zeros(len(X)), color='red') #ASV path
-    # ax2.view_init(200, -50)
-    # ax2.set_zlabel('Depth (m)')
-    # ax2.invert_zaxis()
-    # ax2.set_xlabel('Easting (m)')
-    # ax2.set_ylabel('Northing (m)')
+    ax2 = plt.figure(figsize=(8,6)).gca(projection='3d')
+    ax2.scatter(ASV_nor, ASV_eas, Z, c=Z, cmap=cm.viridis)
+    ax2.plot(ASV_nor, ASV_eas, np.zeros(len(X)), color='red') #ASV path
+    ax2.view_init(200, -50)
+    ax2.set_zlabel('Depth (m)')
+    ax2.invert_zaxis()
+    ax2.set_xlabel('Easting (m)')
+    ax2.set_ylabel('Northing (m)')
 
     # 4) Gradient plot
     # Gx, Gy = np.gradient(B) # gradients with respect to x and y
