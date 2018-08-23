@@ -53,6 +53,13 @@ class popupWindow(object):
         self.top.destroy()
 
 '''
+Handle exceptions in Tk loop
+'''
+def handle_exception(exception, value, traceback):
+    print("Caught exception:", exception)
+    print("Try again...")
+
+'''
 Main class for ASV graphics
 '''
 class ASV_graphics:
@@ -75,6 +82,7 @@ class ASV_graphics:
         # Set up GUI
         self.controller = controller
         self.tk = Tk()
+        self.tk.report_callback_exception=handle_exception
         self.tk.title("ASV Control Interface")
         self.tk.protocol("WM_DELETE_WINDOW", self.on_quit)
 
