@@ -17,17 +17,20 @@ river_transect_long = 'Log/river_8-21/ALL_18-07-12 15.03.46.bin' #9.1MB
 river_longlawnmower = 'Log/river_8-21/ALL_18-07-12 15.41.49.bin' #10MB
 river_idk = 'Log/river_8-21/ALL_18-07-12 14.51.23.bin'
 
+lake1 = 'Log/lake_7-27/ALL_18-07-12 06.49.05.bin'
+
 ########################################
 
-data_file = river_longlawnmower
+data_file = lake1
 
 #Mission files
-mission_file = 'Missions/river_longlawnmower.csv'
+mission_file = 'Missions/old missions/lake_lawnmower1.csv'
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
-map_file = '../Maps/river_8-13.tif'
+# map_file = '../Maps/river_8-13.tif'
 # map_file = '../Maps/cast.tif'
+map_file = '../Maps/lake_7-27.tif'
 
 # Plot parameters
 CELL_RES = 1 #cell resolution
