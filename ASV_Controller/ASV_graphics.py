@@ -23,13 +23,14 @@ IMAGE_WIDTH = 300
 IMAGE_HEIGHT = 200
 MAP_FILE = '../Maps/river_8-13.tif'
 
-MAP_WIDTH = 600#800
-MAP_HEIGHT = 400#600
+MAP_WIDTH = 600
+MAP_HEIGHT = 400
 
 POINT_RADIUS = 5
 
 point_track_color = 'red'
 transect_color = 'orange'
+border_color = 'green'
 
 '''
 Pop-up window for clearing waypoints (are you sure you want to do this)
@@ -88,7 +89,8 @@ class ASV_graphics:
         self.add_wps_mode = False
         self.remove_wps_mode = False
         self.running_mission_mode = False
-        self.repeat_mission_mode = False
+        self.transect_mode = False
+        # self.repeat_mission_mode = False
         self.set_border_mode = False
         self.wp_markers = []
         self.wp_labels = []
@@ -133,17 +135,23 @@ class ASV_graphics:
         self.auv_status = Label(self.sidebar_frame, anchor='w', text='ASV Status: STOPPED', fg="red")
         self.auv_status.pack()
 
-        self.repeat_mission_label = Label(self.sidebar_frame, anchor='w', text='Repeat Mission: NO', fg="red")
-        self.repeat_mission_label.pack()
+        self.transect_mission_label = Label(self.sidebar_frame, anchor='w', text='Transect Mission: NO', fg="red")
+        self.transect_mission_label.pack()
+        self.transect_mission = Button(self.sidebar_frame, anchor='w', text='Enable Transect Mission', command=self.on_toggle_transect)
+        self.transect_mission.pack()
 
-        self.repeat_frame = Frame(self.sidebar_frame)
-        self.repeat_frame.pack()
-        self.repeat_label = Label(self.repeat_frame, anchor='w', text='# Repeats').pack(side='left')
-        self.repeat_times = Entry(self.repeat_frame, width=5)
-        self.repeat_times.insert(END, '10')
-        self.repeat_times.pack(side='right')
-        self.repeat_mission = Button(self.sidebar_frame, anchor='w', text='Enable Repeat Mission', command=self.on_toggle_repeat_mission)
-        self.repeat_mission.pack()
+        # Repeat mission (has been commented out because not useful)
+        # self.repeat_mission_label = Label(self.sidebar_frame, anchor='w', text='Repeat Mission: NO', fg="red")
+        # self.repeat_mission_label.pack()
+
+        # self.repeat_frame = Frame(self.sidebar_frame)
+        # self.repeat_frame.pack()
+        # self.repeat_label = Label(self.repeat_frame, anchor='w', text='# Repeats').pack(side='left')
+        # self.repeat_times = Entry(self.repeat_frame, width=5)
+        # self.repeat_times.insert(END, '10')
+        # self.repeat_times.pack(side='right')
+        # self.repeat_mission = Button(self.sidebar_frame, anchor='w', text='Enable Repeat Mission', command=self.on_toggle_repeat_mission)
+        # self.repeat_mission.pack()
 
         self.start_frame = Frame(self.sidebar_frame)
         self.start_frame.pack()
@@ -393,13 +401,11 @@ class ASV_graphics:
             self.running_mission_mode = True
             self.mission.configure(text='Abort Mission')
 
-            print(self.wp_list.get(0, END))
-
-            if self.repeat_mission_mode:
-                num_repeats = int(self.repeat_times.get())
-                self.mission_wps = self.get_mission_wps(num_repeats)
-            else:
-                self.mission_wps = self.get_mission_wps(1)
+            # if self.repeat_mission_mode:
+            #     num_repeats = int(self.repeat_times.get())
+            #     self.mission_wps = self.get_mission_wps(num_repeats)
+            # else:
+            self.mission_wps = self.get_mission_wps(1)
 
             print('Waypoints:', self.mission_wps)
 
@@ -444,18 +450,40 @@ class ASV_graphics:
             self.mission_remove_wps.configure(text='Done Removing Waypoints')
         print('Remove wps mode: ', self.remove_wps_mode)
 
-    def on_toggle_repeat_mission(self):
-        if self.repeat_mission_mode:
-            self.repeat_mission_mode = False
-            self.repeat_mission.configure(text='Enable Repeat Mission')
+    def on_toggle_transect(self):
+        if self.transect_mode:
+            self.transect_mode = False
+            self.transect_mission.configure(text='Enable Transect Mission')
         else:
-            self.repeat_mission_mode = True
-            self.repeat_mission.configure(text='Disable Repeat Mission')
-        print('Repeat mission mode: ', self.repeat_mission_mode)
-        repeat_text = 'NO'
-        if self.repeat_mission_mode:
-            repeat_text = 'YES'
-        self.repeat_mission_label['text'] = 'Repeat Mission: ' + repeat_text
+            self.transect_mode = True
+            self.transect_mission.configure(text='Disable Transect Mission')
+        print('Transect mission mode: ', self.transect_mode)
+        transect_text = 'NO'
+        if self.transect_mode:
+            transect_text = 'YES'
+        self.transect_mission_label['text'] = 'Transect Mission: ' + transect_text
+
+        #send update to ASV
+        msg = '!TRANSECT, %d' % int(self.transect_mode)
+        print(msg)
+        if self.controller.mode == 'HARDWARE MODE':
+            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, msg.encode())
+        else:
+            xbee_msg = XBeeModel.message.XBeeMessage(msg.encode(), None, None)
+            self.controller.robot.xbee_callback(xbee_msg)
+
+    # def on_toggle_repeat_mission(self):
+    #     if self.repeat_mission_mode:
+    #         self.repeat_mission_mode = False
+    #         self.repeat_mission.configure(text='Enable Repeat Mission')
+    #     else:
+    #         self.repeat_mission_mode = True
+    #         self.repeat_mission.configure(text='Disable Repeat Mission')
+    #     print('Repeat mission mode: ', self.repeat_mission_mode)
+    #     repeat_text = 'NO'
+    #     if self.repeat_mission_mode:
+    #         repeat_text = 'YES'
+    #     self.repeat_mission_label['text'] = 'Repeat Mission: ' + repeat_text
 
     def on_waypoint_selection(self, event):
         selection = self.wp_list.curselection()
@@ -678,7 +706,7 @@ class ASV_graphics:
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, control_msg.encode())
 
         #Also send transect params...
-        control_msg = '!TRANSECT, %f, %f, %f, %d, %d, %f, %f' % (float(self.K_v.get()), float(self.K_latAng.get()), float(self.K_vert.get()), int(self.v_rate.get()), int(self.a_rate.get()), float(self.vx_des.get()), float(self.K_vi.get()))
+        control_msg = '!CONTROL, %f, %f, %f, %d, %d, %f, %f' % (float(self.K_v.get()), float(self.K_latAng.get()), float(self.K_vert.get()), int(self.v_rate.get()), int(self.a_rate.get()), float(self.vx_des.get()), float(self.K_vi.get()))
         print(control_msg)
         if self.controller.mode == 'HARDWARE MODE':
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, control_msg.encode())
@@ -766,8 +794,10 @@ class ASV_graphics:
         color = point_track_color
         outline = 'black'
         if border:
-            color = 'orange'
-            outline = 'orange'
+            color = border_color
+            outline = border_color
+        if self.transect_mode:
+            color = transect_color
         return self.canvas.create_oval(x1, y1, x2, y2, fill=color, outline=outline)
 
     def draw_label(self, x, y):
