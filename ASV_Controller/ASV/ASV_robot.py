@@ -122,6 +122,8 @@ class ASV_robot:
 
         self.way_point_checksum = 0
 
+        self.transect_mode = False #If true, repeat waypoints indefinitely
+
         self.bad_connection_limit = 100
 
         # Program termination
@@ -280,24 +282,43 @@ class ASV_robot:
         self.environment.port_ser.write(left_command.encode() + b'\r\n')
 
     def update_waypoint(self):
-        ''' iterate through the set of way points'''
-        if self.des_reached:
-            if len(self.way_points) <= 1:
-                self.cur_des_point = self.cur_des_point
-            else:
-                # print(len(self.way_points))
-                self.way_points = self.way_points[1:]
-                self.cur_des_point = self.way_points[0]
-                self.des_reached = False
+        if self.transect_mode: #repeat waypoints
+            if self.des_reached:
+                if len(self.way_points) == 1:
+                    self.cur_des_point = self.cur_des_point
+                    self.way_points = []
+                else:
+                    if len(self.way_points) == 0:
+                        # print("Readding Points")
+                        for p in self.transect_pts:
+                            self.way_points.append(p)
+                        # print(self.way_points)
+                        if len(self.way_points) > 0:
+                            self.cur_des_point = self.way_points[0]
+                            self.des_reached = False
+                    else:
+                        self.way_points = self.way_points[1:]
+                        self.cur_des_point = self.way_points[0]
+                        self.des_reached = False
+        else: 
+            if self.des_reached:
+                if len(self.way_points) <= 1:
+                    self.cur_des_point = self.cur_des_point
+                else:
+                    # print(len(self.way_points))
+                    self.way_points = self.way_points[1:]
+                    self.cur_des_point = self.way_points[0]
+                    self.des_reached = False
 
     def add_way_point(self, way_point):
         '''add way point'''
         self.way_points.append(way_point)
-        # self.transect_pts.append(way_point)
+        if self.transect_mode:
+            self.transect_pts.append(way_point)
 
     def clear_way_points(self):
         self.way_points = []
-        # self.transect_pts = []
+        self.transect_pts = []
 
     ######################## Controllers ###############################
     def main_controller(self, des_point, v_x_des):
@@ -667,7 +688,7 @@ class ASV_robot:
                 (des_point.x - self.state_est.x)**2)
         # print("Point tracking?")
         if distance <= self.dist_threshold or self.des_reached:
-            print("DEST REACHED!")
+            # print("DEST REACHED!")
             self.stop_motor = True
             self.des_reached = True
             self.first_point = False
@@ -806,7 +827,7 @@ class ASV_robot:
             self.Kp_nom = float(parsed_data[2])
             self.forward_threshold = float(parsed_data[3])
             self.back_spin_threshold = float(parsed_data[4])
-        elif parsed_data[0] == "!TRANSECT":
+        elif parsed_data[0] == "!CONTROL":
             self.K_v = float(parsed_data[1])
             self.K_latAng = float(parsed_data[2])
             self.K_vert = float(parsed_data[3])
@@ -815,6 +836,9 @@ class ASV_robot:
             self.v_x_des = float(parsed_data[6])
             self.K_vi = float(parsed_data[7])
             print('Transect Gains Received.')
+        elif parsed_data[0] == "!TRANSECT":
+            self.transect_mode = bool(int(parsed_data[1]))
+            print('Transect mode:', self.transect_mode)
         else:
             print('Unknown command!')
 

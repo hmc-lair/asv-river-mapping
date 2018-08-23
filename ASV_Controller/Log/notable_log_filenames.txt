@@ -27,4 +27,3 @@ river5 = 'Log/river_8-13/ALL_18-07-12 10.58.35.bin'
 river_lawnmower = 'Log/river_8-21/ALL_18-07-12 14.12.07.bin' # 5MB
 river_transect_long = 'Log/river_8-21/ALL_18-07-12 15.03.46.bin' #9.1MB
 river_longlawnmower = 'Log/river_8-21/ALL_18-07-12 15.41.49.bin' #10MB
-river_idk = 'Log/river_8-21/ALL_18-07-12 14.51.23.bin'
