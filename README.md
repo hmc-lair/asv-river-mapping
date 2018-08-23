@@ -25,19 +25,20 @@ List of Python libraries (MUST use Python 3, use pip3 to install):
 + ```Deprecated Files```: Files that are no longer used.
 
 ### Mission Planning Instructions
-1. (Optional) To start the GUI in simulation mode, go to ASV_controller.py and set ```self.mode = "SIM MODE"```. Make sure to change this back to ```self.mode = "HARDWARE MODE"``` before real deployments.
-2. Start the GUI by running in a terminal window:
+1. (Optional) To start the GUI in simulation mode, open ```ASV_controller.py``` and set ```self.mode = "SIM MODE"```. Make sure to change this back to ```self.mode = "HARDWARE MODE"``` before real deployments.
+2. Open ```ASV_graphics.py``` and make sure the variables ```MAP_FILE, IMAGE_WIDTH, IMAGE_HEIGHT``` are correct.
+3. Start the GUI by running in a terminal window:
 ```
 $ python3 ASV_gui.py
 ```
-3. (Optional) Use "Border Configuration" buttons to trace/clear/load/save border. This serves as a guide for determining where waypoints can be placed.
-4. Check compass offset under "Compass Calibration." The default offset is -12 degrees.
-5. Check/update control parameters under "Control" depending on mission. Most important values are "Fwd Limit/Bwd Limit" because this determines the max motor thrust (0-1000 rpm).
-6. Enable/disable "Transect Mission." If enabled, the ASV will repeat the specified waypoints until "Stop ASV" is pressed.
-7. In the "Mission Planning" panel, either load a mission or manually add waypoints. To change the type of controller used to reach a particular waypoint (point track=upstream vs. transect=across river), click on the point in the map (click "Done Add Waypoints" if necessary).
-8. Click "Start Mission." This WON'T start the ASV, but it will send all the mission waypoints to the ASV. Check the ASV ssh terminal window to make sure all waypoints were sent (checksum should be correct) AND the "!STARTMISSION" message MUST have been sent.
-9. If everything is good, click "Start ASV" and the mission will begin.
-10. At any point, click "Stop ASV" to stop the ASV from moving (but if ASV re-started, mission will resume). "Abort Mission" will clear all the waypoints on the ASV.
+4. (Optional) Use "Border Configuration" buttons to trace/clear/load/save border. This serves as a guide for determining where waypoints can be placed.
+5. Check compass offset under "Compass Calibration." The default offset is -12 degrees.
+6. Check/update control parameters under "Control" depending on mission. Most important values are "Fwd Limit/Bwd Limit" because this determines the max motor thrust (0-1000 rpm).
+7. Enable/disable "Transect Mission." If enabled, the ASV will repeat the specified waypoints until "Stop ASV" is pressed.
+8. In the "Mission Planning" panel, either load a mission or manually add waypoints. To change the type of controller used to reach a particular waypoint (point track=upstream vs. transect=across river), click on the point in the map (click "Done Add Waypoints" if necessary).
+9. Click "Start Mission." This WON'T start the ASV, but it will send all the mission waypoints to the ASV. Check the ASV ssh terminal window to make sure all waypoints were sent (checksum should be correct) AND the "!STARTMISSION" message MUST have been sent.
+10. If everything is good, click "Start ASV" and the mission will begin.
+11. At any point, click "Stop ASV" to stop the ASV from moving (but if ASV re-started, mission will resume). "Abort Mission" will clear all the waypoints on the ASV, but not in the GUI.
 
 ***CURRENT BUG: IF MISSION RE-STARTED, FIRST POINT WILL BE POINT TRACK***
 
