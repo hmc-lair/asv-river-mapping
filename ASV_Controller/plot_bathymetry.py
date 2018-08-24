@@ -15,16 +15,18 @@ TRANSDUCER_OFFSET = 0.1 #m
 river_lawnmower = 'Log/river_8-21/ALL_18-07-12 14.12.07.bin' # 5MB
 river_transect_long = 'Log/river_8-21/ALL_18-07-12 15.03.46.bin' #9.1MB
 river_longlawnmower = 'Log/river_8-21/ALL_18-07-12 15.41.49.bin' #10MB
-river_idk = 'Log/river_8-21/ALL_18-07-12 14.51.23.bin'
+river_transect = 'Log/river_8-21/ALL_18-07-12 14.51.23.bin'
+river_idk = 'Log/river_8-21/ALL_18-07-12 14.30.01.bin'
 
 lake1 = 'Log/lake_7-27/ALL_18-07-12 06.49.05.bin'
 
 ########################################
 
-data_file = lake1
+
+data_file = river_transect_long
 
 #Mission files
-mission_file = 'Missions/old missions/lake_lawnmower1.csv'
+mission_file = 'Missions/river_transect_long.csv'
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
@@ -71,6 +73,16 @@ def read_data_file(filename, inv_trans):
     
     ADCP_data = list(filter(lambda x: x.split(b',')[0] == b'$ADCP', split_data[:-1]))
     state_data = list(filter(lambda x: x.split(b',')[0] == b'$STATE', split_data[:-1]))
+
+    #Control data
+    ctrl_data = list(filter(lambda x: x.split(b',')[0] == b'$CTRL', split_data[:-1]))
+    ctrl_data_split = [state.split(b',') for state in ctrl_data]
+    all_wps = [(float(state[-1]), float(state[-2])) for state in ctrl_data_split]
+    wp_nor = []
+    wp_eas = []
+    for x, y in all_wps:
+        wp_nor.append(x)
+        wp_eas.append(y)
     
     #GPS data
     state_data_split = [state.split(b',') for state in state_data]
@@ -84,7 +96,7 @@ def read_data_file(filename, inv_trans):
     #Water depths
     depths = read_ADCP_file(ADCP_data)
 
-    return np.asarray(ASV_nor), np.asarray(ASV_eas), depths
+    return np.asarray(ASV_nor), np.asarray(ASV_eas), depths, np.asarray(wp_nor), np.asarray(wp_eas)
 
 def read_ADCP_file(data):
     depths = []
@@ -106,67 +118,113 @@ def read_mission_file(filename, inv_trans):
             if line[-1] == '\n':
                 line = line[:-1]
             coords.append(list(map(float,line.split(','))))
-    X = []
-    Y = []
+    X_all = []
+    Y_all = []
+    R = []
+    C = []
     for lat,lon in coords:
         x, y, _,_ = utm.from_latlon(lat, lon)
         row,col = gdal.ApplyGeoTransform(inv_trans, x, y)
-        X.append(row)
-        Y.append(col)
+        X_all.append(x)
+        Y_all.append(y)
+        R.append(row)
+        C.append(col)
         
-    return X, Y
+    return X_all, Y_all, R, C
 
 ###############################################################################
+
+def get_track_errs(ASV_nor, ASV_eas, wp_nor, wp_eas, mission_nor, mission_eas):
+    errs = []
+    p1 = [mission_eas[0], mission_nor[0]] #p1 and p2 define current line we want to follow
+    p2 = [mission_nor[1], mission_eas[1]]
+
+    wps_nor = []
+    wps_eas = []
+    for i in range(len(ASV_nor)): #at each timestamp, get tracking error
+        if wp_nor[i] != 1.0 and wp_nor[i] not in wps_nor:
+            wps_nor.append(wp_nor[i])
+        if wp_eas[i] != 1.0 and wp_eas[i] not in wps_eas:
+            wps_eas.append(wp_eas[i])
+    print(wps_nor)
+    print(wps_eas)
+    print(mission_nor)
+    print(wps_eas)
+    return errs
 
 #Read data from 1 trial
 def main():
     img, inv_trans, geo_trans, MAP_WIDTH, MAP_HEIGHT = load_map(map_file)
 
+    # mission wps
+    mission_nor, mission_eas, mission_X, mission_Y = read_mission_file(mission_file, inv_trans)
     #GPS DATA
-    ASV_nor, ASV_eas, Z = read_data_file(data_file, inv_trans)
+    ASV_nor, ASV_eas, Z, wp_nor, wp_eas = read_data_file(data_file, inv_trans)
+
+    tracking_errs = get_track_errs(ASV_nor, ASV_eas, wp_nor, wp_eas, mission_nor, mission_eas)
 
     if len(ASV_nor) != len(Z):
         print('Size mismatch!', len(ASV_nor), len(Z))
         ASV_nor = ASV_nor[:-1]
         ASV_eas = ASV_eas[:-1]
 
-    min_depth = Z.min()
+    # #Cut off mess at beginning...
+    # print('# pts: ', len(ASV_nor))
+    # cut = 770
+    # ASV_nor = ASV_nor[cut:cut+40]
+    # ASV_eas = ASV_eas[cut:cut+40]
+    # Z = Z[cut:cut+40]
+    # print('# pts (cut): ', len(ASV_nor))
 
-    #Normalize positions
-    min_x = min(ASV_nor)
-    min_y = min(ASV_eas)
-    X = [v - min_x for v in ASV_nor]
-    Y = [v - min_y for v in ASV_eas]
-    max_x = max(X)
-    max_y = max(Y)
+    # # get dist errors for first few points...
+    # avg = 0
+    # num = 40
+    # for i in range(num):
+    #     x = ASV_eas[i]
+    #     y = ASV_nor[i]
+    #     d = np.sqrt((mission_nor[1]-mission_nor[0])**2 + (mission_eas[1]-mission_eas[0])**2)
+    #     dist = np.abs((mission_nor[1]-mission_nor[0])*x - (mission_eas[1]-mission_eas[0])*y + mission_eas[1]*mission_nor[0] - mission_nor[1]*mission_eas[0])/d
+    #     print('Dist error: ', dist)
+    #     avg += dist
+    # print('Avg error: ', avg/num)
 
-    # Method 0: 1D Kalman Filter
-    m = int(np.ceil(max_x/CELL_RES))
-    n = int(np.ceil(max_y/CELL_RES))
-    baseFloor = min_depth
-    B = baseFloor*np.ones((m,n))
-    Bvar = np.zeros((m,n))
+    # min_depth = Z.min()
 
-    for t in range(len(ASV_nor)):
-        cur_x = X[t]
-        cur_y = Y[t]
-        cur_alt = Z[t]
+    # #Normalize positions
+    # min_x = min(ASV_nor)
+    # min_y = min(ASV_eas)
+    # X = [v - min_x for v in ASV_nor]
+    # Y = [v - min_y for v in ASV_eas]
+    # max_x = max(X)
+    # max_y = max(Y)
 
-        i = int(np.floor(cur_x/CELL_RES))
-        j = int(np.floor(cur_y/CELL_RES))
+    # # Method 0: 1D Kalman Filter
+    # m = int(np.ceil(max_x/CELL_RES))
+    # n = int(np.ceil(max_y/CELL_RES))
+    # baseFloor = min_depth
+    # B = baseFloor*np.ones((m,n))
+    # Bvar = np.zeros((m,n))
 
-        for k in range(max(0,i-win), min(m, i+win)):
-            for l in range(max(0,j-win), min(n,j+win)):
-                dist2 = 0.1+CELL_RES*((k-i)**2+(l-j)**2)**0.5
+    # for t in range(len(ASV_nor)):
+    #     cur_x = X[t]
+    #     cur_y = Y[t]
+    #     cur_alt = Z[t]
+
+    #     i = int(np.floor(cur_x/CELL_RES))
+    #     j = int(np.floor(cur_y/CELL_RES))
+
+    #     for k in range(max(0,i-win), min(m, i+win)):
+    #         for l in range(max(0,j-win), min(n,j+win)):
+    #             dist2 = 0.1+CELL_RES*((k-i)**2+(l-j)**2)**0.5
                     
-                if B[k][l] == baseFloor:
-                    B[k][l] = cur_alt
-                    Bvar[k][l] = (dist2*sigma_slope+sigma_offset)**2
-                else:
-                    var = (dist2*sigma_slope+sigma_offset)**2
-                    cur_K = float(Bvar[k][l])/(Bvar[k][l] + var)
-                    B[k][l] = B[k][l]+cur_K*(cur_alt - B[k][l])
-                    Bvar[k][l] = Bvar[k][l]-cur_K*Bvar[k][l];
+    #             if B[k][l] == baseFloor:
+    #                 B[k][l] = cur_alt
+    #                 Bvar[k][l] = (dist2*sigma_slope+sigma_offset)**2
+    #             else:
+    #                 var = (dist2*sigma_slope+sigma_offset)**2
+    #                 cur_K = float(Bvar[k][l])/(Bvar[k][l] + var)
+    #                 B[k][l] = B[k][l]+cur_K*(cur_alt - B[k][l])
+    #                 Bvar[k][l] = Bvar[k][l]-cur_K*Bvar[k][l];
 
     ###########################################################################
     # PLOTS
@@ -179,33 +237,31 @@ def main():
         X_pix.append(row)
         Y_pix.append(col)
     plt.plot(X_pix, Y_pix, color='black', zorder=2, label='GPS readings')
-    # mission wps
-    mission_X, mission_Y = read_mission_file(mission_file, inv_trans)
     plt.plot(mission_X, mission_Y, color='red', marker='.', label='Mission plan')
     plt.legend()
 
-    X_plot, Y_plot = np.meshgrid(np.arange(min_y, min_y + n*CELL_RES, CELL_RES), np.arange(min_x, min_x + m*CELL_RES, CELL_RES))
+    # X_plot, Y_plot = np.meshgrid(np.arange(min_y, min_y + n*CELL_RES, CELL_RES), np.arange(min_x, min_x + m*CELL_RES, CELL_RES))
     
-    # # 2) Depth surface map
-    ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
-    ax1.plot_surface(X_plot, Y_plot, B, cmap=cm.viridis) #depths
-    ax1.plot(ASV_eas, ASV_nor, np.zeros(len(X)), color='red') #ASV path
-    ax1.view_init(200, -50)
-    ax1.set_zlabel('Depth (m)')
-    ax1.invert_zaxis()
-    ax1.set_xlabel('Easting (m)')
-    ax1.set_ylabel('Northing (m)')
+    # # # 2) Depth surface map
+    # ax1 = plt.figure(figsize=(8,6)).gca(projection='3d')
+    # ax1.plot_surface(X_plot, Y_plot, B, cmap=cm.viridis) #depths
+    # ax1.plot(ASV_eas, ASV_nor, np.zeros(len(X)), color='red') #ASV path
+    # ax1.view_init(200, -50)
+    # ax1.set_zlabel('Depth (m)')
+    # ax1.invert_zaxis()
+    # ax1.set_xlabel('Easting (m)')
+    # ax1.set_ylabel('Northing (m)')
 
-    # # 3) Scatter plot of raw data
-    ax2 = plt.figure(figsize=(8,6)).gca(projection='3d')
+    # # # 3) Scatter plot of raw data
+    # ax2 = plt.figure(figsize=(8,6)).gca(projection='3d')
 
-    ax2.scatter(ASV_eas, ASV_nor, Z, c=Z, cmap=cm.viridis)
-    ax2.plot(ASV_eas, ASV_nor, np.zeros(len(X)), color='red') #ASV path
-    ax2.view_init(200, -50)
-    ax2.set_zlabel('Depth (m)')
-    ax2.invert_zaxis()
-    ax2.set_xlabel('Easting (m)')
-    ax2.set_ylabel('Northing (m)')
+    # ax2.scatter(ASV_eas, ASV_nor, Z, c=Z, cmap=cm.viridis)
+    # ax2.plot(ASV_eas, ASV_nor, np.zeros(len(X)), color='red') #ASV path
+    # ax2.view_init(200, -50)
+    # ax2.set_zlabel('Depth (m)')
+    # ax2.invert_zaxis()
+    # ax2.set_xlabel('Easting (m)')
+    # ax2.set_ylabel('Northing (m)')
 
     # 4) Gradient plot
     # Gx, Gy = np.gradient(B) # gradients with respect to x and y
