@@ -11,22 +11,23 @@ import math
 # IMAGE_HEIGHT = 250.
 # MAP_FILE = '../Maps/cast.tif'
 
-# IMAGE_WIDTH = 200
-# IMAGE_HEIGHT = 150
-# MAP_FILE = '../Maps/millikan.tif'
+IMAGE_WIDTH = 200
+IMAGE_HEIGHT = 150
+MAP_FILE = '../Maps/millikan.tif'
 
 # IMAGE_WIDTH = 1000
 # IMAGE_HEIGHT = 700
 # MAP_FILE = '../Maps/lake_7-27.tif'
 
-IMAGE_WIDTH = 300
-IMAGE_HEIGHT = 200
-MAP_FILE = '../Maps/river_8-13.tif'
+# IMAGE_WIDTH = 300
+# IMAGE_HEIGHT = 200
+# MAP_FILE = '../Maps/river_8-13.tif'
 
 MAP_WIDTH = 600
 MAP_HEIGHT = 400
 
-POINT_RADIUS = 5
+POINT_RADIUS = 4
+BORDER_RADIUS = 2
 
 point_track_color = 'red'
 transect_color = 'orange'
@@ -56,7 +57,7 @@ class popupWindow(object):
 Handle exceptions in Tk loop
 '''
 def handle_exception(exception, value, traceback):
-    print("Caught exception:", exception)
+    print("Caught exception:", exception, value)
     print("Try again...")
 
 '''
@@ -618,7 +619,7 @@ class ASV_graphics:
         with open('Borders/' + border_file + '.csv', 'w') as f:
             for point in self.border_markers:
                 x0, y0, _, _ = self.canvas.coords(point)
-                lat, lon = self.pixel_to_laton(x0 + POINT_RADIUS, y0 + POINT_RADIUS)
+                lat, lon = self.pixel_to_laton(x0 + BORDER_RADIUS, y0 + BORDER_RADIUS)
                 f.write(str(lat) + ',' + str(lon) + '\n')
 
     ###########################################################################
@@ -785,8 +786,11 @@ class ASV_graphics:
         self.origin_coords = (col, row)
 
     def draw_circle(self, x, y, border=False):
-        x1, y1 = (x - POINT_RADIUS), (y - POINT_RADIUS)
-        x2, y2 = (x + POINT_RADIUS), (y + POINT_RADIUS)
+        radius = POINT_RADIUS
+        if border:
+            radius = BORDER_RADIUS
+        x1, y1 = (x - radius), (y - radius)
+        x2, y2 = (x + radius), (y + radius)
         color = point_track_color
         outline = 'black'
         if border:
