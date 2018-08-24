@@ -257,12 +257,12 @@ class ASV_graphics:
         self.speed_frame.pack()
         # self.set_desired_speed = Button(self.speed_frame, anchor='w', text='Set Desired Speed', command=self.on_set_desired_speed)
         # self.set_desired_speed.pack()
-        self.desired_speed_label = Label(self.speed_frame, anchor='w', text='Desired Speed (m/s)').pack(side='left')
-        self.desired_speed = Entry(self.speed_frame, width=10)
+        # self.desired_speed_label = Label(self.speed_frame, anchor='w', text='Desired Speed (m/s)').pack(side='left')
+        # self.desired_speed = Entry(self.speed_frame, width=10)
 
-        self.desired_speed.insert(END, '3')
-        self.desired_speed.bind('<Return>', self.on_set_desired_speed)
-        self.desired_speed.pack(side='right')
+        # self.desired_speed.insert(END, '3')
+        # self.desired_speed.bind('<Return>', self.on_set_desired_speed)
+        # self.desired_speed.pack(side='right')
 
         #######################################################################
         # Point Tracking Parameters
@@ -701,12 +701,6 @@ class ASV_graphics:
         if self.controller.mode == 'HARDWARE MODE':
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, heading_msg.encode())
 
-    def on_set_desired_speed(self, event):
-        speed_msg = '!SETSPEED, %f' % float(self.desired_speed.get())
-        print(speed_msg)
-        if self.controller.mode == 'HARDWARE MODE':
-            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, speed_msg.encode())
-
     def on_set_control(self):
         control_msg = '!GAIN, %f, %f, %f, %f' % (float(self.Kp_ang.get()), float(self.Kp_nom.get()), float(self.fwd_limit.get()), float(self.bwd_limit.get()))
         print(control_msg)
@@ -718,12 +712,6 @@ class ASV_graphics:
         print(control_msg)
         if self.controller.mode == 'HARDWARE MODE':
             self.controller.local_xbee.send_data_async(self.controller.boat_xbee, control_msg.encode())
-
-        #Also send speed..
-        speed_msg = '!SETSPEED, %f' % float(self.desired_speed.get())
-        print(speed_msg)
-        if self.controller.mode == 'HARDWARE MODE':
-            self.controller.local_xbee.send_data_async(self.controller.boat_xbee, speed_msg.encode())
 
     ###########################################################################
     # Updating GUI
