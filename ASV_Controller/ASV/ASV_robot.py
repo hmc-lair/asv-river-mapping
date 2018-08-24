@@ -815,7 +815,6 @@ class ASV_robot:
             print('Stop message received. Motors stopped.')
         elif parsed_data[0] == "!START":
             self.motor_stop = False
-            self.first_point = True
             print('Start message received. Motors re-started.')
         elif parsed_data[0] == "!HEADINGOFFSET":
             self.heading_offset = float(parsed_data[1])

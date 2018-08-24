@@ -14,13 +14,19 @@ from read_asv_data import read_ensemble
 # Cross section velocity with color intensity
 # 3D map with depth profile.... maybe? (need to fix the scale issue)
 
+# Load processed file
+load_processed = True
+
+
 # Plot parameters
 CELL_RES = 0.5
 Z_CELL_RES = 0.06
-sigma_slope = 0.5
-sigma_offset = 0.6142
-win = 1
-z_win = 1
+sigma_slope_depth = 0.00717
+sigma_offset_depth = -0.0095
+sigma_slope_v = 0.016
+sigma_offset_v = 0.00639
+win = 5
+z_win = 3
 TRANSDUCER_OFFSET = 0.1 #m
 BEAM_ANGLE = 20 #degrees
 
@@ -34,10 +40,12 @@ river_longlawnmower = 'Log/river_8-21/ALL_18-07-12 15.41.49.bin' #10MB
 
 
 map_file = '../Maps/river_8-13.tif'
-data_file = river_transect_long
-v_output_file = 'transect_v2.csv'
-depth_output_file = 'transect_d2.csv'
-raw_output_file = 'transect_raw.csv'
+data_file = river_lawnmower
+
+# Output files
+v_output_file = 'short_lawn_v.csv'
+depth_output_file = 'short_lawn_d.csv'
+raw_output_file = 'short_lawn_raw.csv'
 
 
 surface_output_file = 'Log/SURFACE.csv'
@@ -114,9 +122,10 @@ def main():
     ########################## Reading Data ##########################
     print("Reading data...")
     # Note: Velocities are in millimeters per second
+
     ASV_X, ASV_Y, Z, depth_cell_length, relative_velocities, bt_velocties = read_data_file(data_file)
 
-    # all_data = np.load(data_file)
+    # all_data = np.load('transect_raw.csv')
     # ASV_X = all_data[0]
     # ASV_Y = all_data[1]
     # Z = all_data[2]
@@ -161,9 +170,9 @@ def main():
                     
                 if B[k][l] == baseFloor:
                     B[k][l] = cur_alt
-                    Bvar[k][l] = (dist2*sigma_slope+sigma_offset)**2
+                    Bvar[k][l] = (dist2*sigma_slope_depth+sigma_offset_depth)**2
                 else:
-                    var = (dist2*sigma_slope+sigma_offset)**2
+                    var = (dist2*sigma_slope_depth+sigma_offset_depth)**2
                     cur_K = float(Bvar[k][l])/(Bvar[k][l] + var)
                     B[k][l] = B[k][l]+cur_K*(cur_alt - B[k][l])
                     Bvar[k][l] = Bvar[k][l]-cur_K*Bvar[k][l];
@@ -194,11 +203,15 @@ def main():
     depth_cell_nums = [len(v) for v in relative_velocities]
     depths = []
 
+    max_z = 0
     ## Find discrete depth values
     for i in range(len(relative_velocities)):
         depths.append([])
         for j in range(len(relative_velocities[i])):
-            depths[i].append(j * depth_cell_length[i] * 0.01 + TRANSDUCER_OFFSET ) 
+            current_z = j * depth_cell_length[i] * 0.01 + TRANSDUCER_OFFSET 
+            if max_z < current_z:
+                max_z = current_z
+            depths[i].append(current_z) 
     depths = np.asarray(depths)
     
     # Set boundaries
@@ -211,7 +224,7 @@ def main():
 
     max_x = max(X)
     max_y = max(Y)
-    max_z = np.max(np.max(depths))
+    max_z = max_z
     print(max_z)
 
     min_current = 0
@@ -245,25 +258,21 @@ def main():
 
             i = int(np.floor(cur_x/CELL_RES)) # find which cell we're in
             j = int(np.floor(cur_y/CELL_RES))
-            k = int(np.ceil(cur_z/Z_CELL_RES))
-            if cur_z > 0.9:
-                print("Depth ", cur_z)
-                print(cur_vx, cur_vy, cur_vz)
+            k = int(np.floor(cur_z/Z_CELL_RES))
             # Do not compute if the readings are bad
             if abs(cur_vx) > 10 or abs(cur_vy) > 10 or abs(cur_vz) > 10:
                 # Filter out bad data
-                print("filtered!")
                 continue
             else:
                 # loop over the 3d space in a defined window
                 for a in range(max(0,i-win), min(m, i+win)):
                     for b in range(max(0,j-win), min(n,j+win)):
                         for c in range(max(0,k-z_win), min(l, k+z_win)):
-                            if cur_z > 0.9:
-                                print("At cell" , c * Z_CELL_RES)
-                            if (c * Z_CELL_RES >= max_depth):
-                                # print("In here!")
-                                # print(a,b,c)
+                            cur_depth = B_new[b][a]
+                            # print("Current pos" , c * Z_CELL_RES)
+                            # print("max_depth ", max_depth)
+                            # print("current depth ", cur_depth)
+                            if (c * Z_CELL_RES <= abs(max_depth) and c * Z_CELL_RES <= abs(cur_depth)):
                                 # find from current cell to that cell
                                 dist2 = 0.1+CELL_RES*((a-i)**2+(b-j)**2 + (c-k)**2 )**0.5
                                 # if this is first time updating this cell...
@@ -271,16 +280,16 @@ def main():
                                 # print(cur_vx)
                                 if B_vx[a,b,c] == vx_current_min:
                                     B_vx[a,b,c] = cur_vx
-                                    B_vx_var[a,b,c] = (dist2*sigma_slope+sigma_offset)**2
+                                    B_vx_var[a,b,c] = (dist2*sigma_slope_v+sigma_offset_v)**2
                                 elif B_vy[a,b,c] == vy_current_min:
                                     B_vy[a,b,c] = cur_vy
-                                    B_vy_var[a,b,c] = (dist2*sigma_slope+sigma_offset)**2
+                                    B_vy_var[a,b,c] = (dist2*sigma_slope_v+sigma_offset_v)**2
                                 elif B_vz[a,b,c] == vz_current_min:
                                     B_vz[a,b,c] = cur_vz
-                                    B_vz_var[a,b,c] = (dist2*sigma_slope+sigma_offset)**2
+                                    B_vz_var[a,b,c] = (dist2*sigma_slope_v+sigma_offset_v)**2
                                 else:
                                     # Current Error for the cell
-                                    var = (dist2*sigma_slope+sigma_offset)**2
+                                    var = (dist2*sigma_slope_v+sigma_offset_v)**2
                                     cur_Kx = float(B_vx_var[a,b,c])/(B_vx_var[a,b,c] + var)
                                     cur_Ky = float(B_vy_var[a,b,c])/(B_vy_var[a,b,c] + var)
                                     cur_Kz = float(B_vz_var[a,b,c])/(B_vz_var[a,b,c] + var)
@@ -308,7 +317,7 @@ def main():
 
     y_axis = np.arange(min_y, min_y + n*CELL_RES, CELL_RES)
     x_axis = np.arange(min_x, min_x + m*CELL_RES, CELL_RES)
-    z_axis = -np.arange(min_z, min_z + (l)*Z_CELL_RES, Z_CELL_RES)
+    z_axis = -np.arange(min_z + Z_CELL_RES, min_z + (l)*Z_CELL_RES, Z_CELL_RES)
     X_plot, Y_plot, Z_plot = np.meshgrid(x_axis, y_axis, z_axis)
 
     # Save the unfiltered coordinate before other invalids got turn 
