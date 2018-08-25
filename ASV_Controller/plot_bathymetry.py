@@ -30,9 +30,9 @@ mission_file = 'Missions/river_transect_long.csv'
 
 # To crop GEOTIFF use:
 # gdal_translate -srcwin 3000 9000 4000 3000 input.tif output.tif
-# map_file = '../Maps/river_8-13.tif'
+map_file = '../Maps/river_8-13.tif'
 # map_file = '../Maps/cast.tif'
-map_file = '../Maps/lake_7-27.tif'
+# map_file = '../Maps/lake_7-27.tif'
 
 # Plot parameters
 CELL_RES = 1 #cell resolution
@@ -83,6 +83,8 @@ def read_data_file(filename, inv_trans):
     for x, y in all_wps:
         wp_nor.append(x)
         wp_eas.append(y)
+    wp_nor = wp_nor[1:] #removing initial 1.0 values
+    wp_eas = wp_eas[1:] 
     
     #GPS data
     state_data_split = [state.split(b',') for state in state_data]
@@ -134,6 +136,9 @@ def read_mission_file(filename, inv_trans):
 
 ###############################################################################
 
+'''
+This function isn't being used
+'''
 def get_track_errs(ASV_nor, ASV_eas, wp_nor, wp_eas, mission_nor, mission_eas):
     errs = []
     p1 = [mission_eas[0], mission_nor[0]] #p1 and p2 define current line we want to follow
@@ -146,23 +151,6 @@ def get_track_errs(ASV_nor, ASV_eas, wp_nor, wp_eas, mission_nor, mission_eas):
             wps_nor.append(wp_nor[i])
         if wp_eas[i] != 1.0 and wp_eas[i] not in wps_eas:
             wps_eas.append(wp_eas[i])
-    return errs
-
-#Read data from 1 trial
-def main():
-    img, inv_trans, geo_trans, MAP_WIDTH, MAP_HEIGHT = load_map(map_file)
-
-    # mission wps
-    mission_nor, mission_eas, mission_X, mission_Y = read_mission_file(mission_file, inv_trans)
-    #GPS DATA
-    ASV_nor, ASV_eas, Z, wp_nor, wp_eas = read_data_file(data_file, inv_trans)
-
-    tracking_errs = get_track_errs(ASV_nor, ASV_eas, wp_nor, wp_eas, mission_nor, mission_eas)
-
-    if len(ASV_nor) != len(Z):
-        print('Size mismatch!', len(ASV_nor), len(Z))
-        ASV_nor = ASV_nor[:-1]
-        ASV_eas = ASV_eas[:-1]
 
     # #Cut off mess at beginning...
     # print('# pts: ', len(ASV_nor))
@@ -183,6 +171,24 @@ def main():
     #     print('Dist error: ', dist)
     #     avg += dist
     # print('Avg error: ', avg/num)
+    return errs
+
+#Read data from 1 trial
+def main():
+    img, inv_trans, geo_trans, MAP_WIDTH, MAP_HEIGHT = load_map(map_file)
+
+    # mission wps
+    mission_nor, mission_eas, mission_X, mission_Y = read_mission_file(mission_file, inv_trans)
+    #GPS DATA
+    ASV_nor, ASV_eas, Z, wp_nor, wp_eas = read_data_file(data_file, inv_trans)
+
+    #This next line isn't being used, see MATLAB code for tracking error...
+    tracking_errs = get_track_errs(ASV_nor, ASV_eas, wp_nor, wp_eas, mission_nor, mission_eas)
+
+    if len(ASV_nor) != len(Z):
+        print('Size mismatch!', len(ASV_nor), len(Z))
+        ASV_nor = ASV_nor[:-1]
+        ASV_eas = ASV_eas[:-1]
 
     min_depth = Z.min()
 
